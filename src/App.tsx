@@ -20,7 +20,7 @@ export default function App() {
   const {
     tab, setTab, hash, meMember, members, profiling, cam, toast,
     admin, showPin, showLogout,
-    preview, me, checks, doneCount, navHidden, pending, state, online, bellDot,
+    preview, me, navHidden, pending, state, online, bellDot,
   } = store;
 
   const camModal = cam && (
@@ -140,9 +140,6 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {tab === 'hari' && checks.length > 0 && (
-        <div className="progress"><i style={{ width: `${(doneCount / checks.length) * 100}%` }} /></div>
-      )}
       <AnimatePresence>{camModal}</AnimatePresence>
       <AnimatePresence>
         {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}

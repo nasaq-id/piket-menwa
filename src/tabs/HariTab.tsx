@@ -1,11 +1,12 @@
+import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Camera, Check, ChevronDown, Clock, Lock, MapPin, PartyPopper } from 'lucide-react';
 import { BREAKDOWN } from '../breakdown';
 import { ABSEN_BUKA_MENIT, ABSEN_TELAT_MENIT, dateStr, geserJam } from '../piket';
 import { isOnline } from '../api';
 import type { AppStore } from '../hooks/useAppStore';
-import { TAP } from '../components/Motion';
 import { Button } from '../components/Button';
+import { PiketStepper, type StepId } from '../components/PiketStepper';
 
 const fmtTanggal = new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
 const todayLong = () => {
@@ -16,7 +17,7 @@ const todayLong = () => {
 export function HariTab({ store }: { store: AppStore }) {
   const {
     today, crew, att, members, nama, warna, jamHari, mySlots, me, unlocked, absenBusy,
-    needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef,
+    needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef, doneCount,
     pendingTugas, onFile, bdDone, bdOpen, setBdOpen, bdSecOpen, setBdSecOpen,
     nilaiHariIni, lapsit, lapsitText, setLapsitText, kirimLapsit, lapsitOpen,
     lapsitOpenAt, jamSelesaiHariIni, tmr, crewBesok, state, setPreview,
@@ -24,6 +25,34 @@ export function HariTab({ store }: { store: AppStore }) {
   } = store;
   const [jamMulai, jamSelesai] = jamHari.split('–').map((x) => x.trim());
   const myAtt = att.find((a) => a.memberId === me && a.tanggal === dateStr(0));
+
+  // ---- Stepper (turunan tampilan saja, tanpa request baru) ----
+  const isPetugas = today !== 'Libur' && crew.includes(me);
+  const lapsitSent = lapsit.length > 0;
+  const buktiLengkap = checks.length > 0 && ev.length >= checks.length;
+  const active: StepId | null = !isPetugas
+    ? null
+    : !unlocked ? 'absen' : !buktiLengkap ? 'bukti' : !lapsitSent ? 'lapsit' : null;
+
+  // Accordion bukti otomatis terbuka saat langkah aktif = Bukti.
+  useEffect(() => {
+    if (isPetugas && active === 'bukti') setBuktiOpen(true);
+  }, [isPetugas, active, setBuktiOpen]);
+
+  const goStep = (id: StepId) => {
+    if (id === 'bukti') setBuktiOpen(true);
+    window.setTimeout(() => {
+      document.getElementById(`sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, id === 'bukti' ? 120 : 0);
+  };
+
+  const lapsitAlasan = !unlocked
+    ? 'Absen dulu (scan wajah di mako) untuk membuka lapsit.'
+    : !buktiLengkap
+      ? `Lengkapi ${checks.length} foto bukti dulu.`
+      : `Lapsit bisa dikirim mulai ${lapsitOpenAt} (30 menit sebelum piket selesai jam ${jamSelesaiHariIni}).`;
+  const lapsitBisa = unlocked && buktiLengkap && lapsitOpen;
+
   return (
     <>
       <p className="tgl">{todayLong()}</p>
@@ -62,11 +91,33 @@ export function HariTab({ store }: { store: AppStore }) {
           </div>
         </div>
       )}
+      {isPetugas && (
+        <PiketStepper
+          active={active}
+          onGo={goStep}
+          steps={[
+            {
+              id: 'absen',
+              label: 'Absen',
+              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? ' · terlambat' : ''}` : 'scan wajah di mako',
+              done: unlocked,
+            },
+            { id: 'bukti', label: 'Bukti', sub: `${ev.length}/${checks.length}`, done: buktiLengkap },
+            {
+              id: 'lapsit',
+              label: 'Lapsit',
+              sub: lapsitSent ? 'terkirim' : lapsitOpen ? 'bisa dikirim' : `mulai ${lapsitOpenAt}`,
+              done: lapsitSent,
+            },
+          ]}
+        />
+      )}
       {today !== 'Libur' && (
         <>
           {mySlots.length === 0 && (
             <p className="hint">Kamu belum terdaftar sebagai petugas piket minggu ini — minta Admin tambahkan via tab Mingguan (mode Admin).</p>
           )}
+          <div id="sec-absen" style={{ scrollMarginTop: '12px' }}>
           <AnimatePresence mode="wait" initial={false}>
             {crew.includes(me) && !unlocked && (
               <motion.div
@@ -74,11 +125,17 @@ export function HariTab({ store }: { store: AppStore }) {
                 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.2 }}
               >
-                <motion.button className="bigbtn" onClick={() => void needVerify()} disabled={absenBusy} {...TAP}>
+                <Button
+                  variant="primary"
+                  busy={absenBusy}
+                  onClick={() => void needVerify()}
+                  ariaLabel="Absen tiba dengan scan wajah di mako"
+                  style={{ width: '100%', marginTop: '10px' }}
+                >
                   {absenBusy
                     ? <><MapPin size={15} /> Mengecek lokasi…</>
                     : <><Camera size={15} /> Absen tiba (scan wajah di mako)</>}
-                </motion.button>
+                </Button>
                 {jamMulai && (
                   <p className="hint">
                     Absen dibuka {geserJam(jamMulai, -ABSEN_BUKA_MENIT)}–{jamSelesai}. Lewat {geserJam(jamMulai, ABSEN_TELAT_MENIT)} tercatat terlambat. Wajib di area mako (GPS aktif).
@@ -96,8 +153,9 @@ export function HariTab({ store }: { store: AppStore }) {
               </motion.p>
             )}
           </AnimatePresence>
-          <div className="bdgroup">
-            <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)}>
+          </div>
+          <div className="bdgroup" id="sec-bukti" style={{ scrollMarginTop: '12px' }}>
+            <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)} aria-expanded={buktiOpen} style={{ minHeight: '44px' }}>
               <span>Bukti Piket (Wajib)</span>
               <em>{ev.length}/{checks.length}</em>
               <ChevronDown size={16} className={buktiOpen ? 'rot' : ''} />
@@ -111,6 +169,11 @@ export function HariTab({ store }: { store: AppStore }) {
                   transition={{ duration: 0.22, ease: 'easeOut' }}
                   style={{ overflow: 'hidden' }}
                 >
+                  {checks.length > 0 && (
+                    <div className="progress buktiProg" role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={checks.length} aria-label="Progress bukti piket">
+                      <i style={{ width: `${(doneCount / checks.length) * 100}%` }} />
+                    </div>
+                  )}
                   {!unlocked && <p className="hint"><Lock size={12} /> Absen dulu (scan wajah di mako) untuk membuka bukti.</p>}
                   <ul className="tasks">
                     {checks.map((c) => {
@@ -130,6 +193,7 @@ export function HariTab({ store }: { store: AppStore }) {
                               if (ph) setPreview({ file: ph.file, judul: c.judul, by: nama(ph.memberId), tanggal: dateStr(0) });
                               else pickPhoto(c.judul);
                             }}
+                            aria-label={ph ? `Lihat foto ${c.judul}` : `Ambil foto ${c.judul}`}
                           >
                             {ph
                               ? <img src={ph.file} alt={c.judul} />
@@ -151,8 +215,8 @@ export function HariTab({ store }: { store: AppStore }) {
             </AnimatePresence>
           </div>
           <div className="bdgroup top">
-            <button className="bdhead" onClick={() => setBdSecOpen((v) => !v)}>
-              <span>Rincian Tugas (Opsional)</span>
+            <button className="bdhead" onClick={() => setBdSecOpen((v) => !v)} aria-expanded={bdSecOpen} style={{ minHeight: '44px' }}>
+              <span>Rincian Tugas (Opsional · ikut nilai)</span>
               <em>{bdDone.length}/{BREAKDOWN.reduce((s, g) => s + g.items.length, 0)}</em>
               <ChevronDown size={16} className={bdSecOpen ? 'rot' : ''} />
             </button>
@@ -175,13 +239,13 @@ export function HariTab({ store }: { store: AppStore }) {
                   const open = !!bdOpen[gi];
                   return (
                     <div key={gi} className="bdgroup">
-                      <button className="bdhead" onClick={() => setBdOpen((o) => ({ ...o, [gi]: !o[gi] }))}>
+                      <button className="bdhead" onClick={() => setBdOpen((o) => ({ ...o, [gi]: !o[gi] }))} aria-expanded={open} style={{ minHeight: '44px' }}>
                         <span>{gi + 1}. {g.title}</span>
                         <em>{done}/{g.items.length}</em>
                         <ChevronDown size={16} className={open ? 'rot' : ''} />
                       </button>
-                      {open && (
-                        <AnimatePresence initial={false}>
+                      <AnimatePresence initial={false}>
+                        {open && (
                           <motion.ul
                             className="tasks"
                             initial={{ height: 0, opacity: 0 }}
@@ -201,14 +265,15 @@ export function HariTab({ store }: { store: AppStore }) {
                               );
                             })}
                           </motion.ul>
-                        </AnimatePresence>
-                      )}
+                        )}
+                      </AnimatePresence>
                     </div>
                   );
                 })}
               </motion.div>
             )}
           </AnimatePresence>
+          <div id="sec-lapsit" style={{ scrollMarginTop: '12px' }}>
           <h2>Catatan Lapsit — Akhir Piket</h2>
           {lapsit.length > 0 ? (
             lapsit.map((l) => (
@@ -221,7 +286,7 @@ export function HariTab({ store }: { store: AppStore }) {
                 </span>
               </div>
             ))
-          ) : (
+          ) : lapsitBisa ? (
             <>
               <textarea
                 className="reason" rows={3}
@@ -237,14 +302,18 @@ export function HariTab({ store }: { store: AppStore }) {
               >
                 Kirim lapsit akhir piket
               </Button>
-              {unlocked && (ev.length < checks.length) && (
-                <p className="hint">Lengkapi {checks.length} foto bukti dulu.</p>
-              )}
-              {unlocked && ev.length >= checks.length && checks.length > 0 && !lapsitOpen && (
-                <p className="hint">Lapsit bisa dikirim mulai {lapsitOpenAt} (30 menit sebelum piket selesai jam {jamSelesaiHariIni}).</p>
-              )}
             </>
+          ) : (
+            <motion.div
+              className="waitcard"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+            >
+              <Lock size={15} />
+              <span>{lapsitAlasan}</span>
+            </motion.div>
           )}
+          </div>
           {tmr !== 'Libur' && crewBesok.length > 0 && (
             <p className="besok">● Besok: {crewBesok.map(nama).join(' & ')} • mulai {(state?.jam[tmr] ?? '09.00–15.00').split('–')[0]}</p>
           )}
