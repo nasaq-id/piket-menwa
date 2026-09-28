@@ -1,4 +1,4 @@
-import { Bell, Settings } from 'lucide-react';
+import { Bell, Settings, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Tab } from '../hooks/useAppStore';
 
@@ -17,23 +17,23 @@ export function AppHeader({ tab, membersCount, offline, admin, bellDot, onTitleT
     <>
       <header className="hd">
         {avatar && (
-          <button className="hdavatar" onClick={onAvatar} title="profil">
+          <button className="hdavatar" onClick={onAvatar} title="Profil" aria-label="Buka profil">
             {avatar}
           </button>
         )}
-        <div onClick={onTitleTap}>
+        <button type="button" className="hdtitle" onClick={onTitleTap} aria-label="Judul aplikasi">
           <h1>{tabTitle[tab]}</h1>
-          <p>Ki Menwa YPKP • {membersCount} anggota{offline ? ' • offline' : ''}</p>
-        </div>
+          <p>Ki Menwa YPKP • {membersCount} anggota{offline ? ' • Offline' : ''}</p>
+        </button>
         <div className="hbtns">
-          <button className="iconbtn" onClick={onGear} title="mode Admin"><Settings size={19} /></button>
-          <button className="iconbtn bell" onClick={onBell} title="pengingat H-1">
+          <button className="iconbtn" onClick={onGear} title="Mode admin" aria-label="Masuk/keluar mode admin"><Settings size={19} /></button>
+          <button className="iconbtn bell" onClick={onBell} title="Pengingat H-1" aria-label="Aktifkan notifikasi">
             <Bell size={19} />{bellDot && <i className="dot" />}
           </button>
         </div>
       </header>
-      {offline && <div className="offline">● offline — data lokal</div>}
-      {admin && <div className="adminbar">mode Admin aktif — kelola di tab Mingguan/Tukar</div>}
+      {offline && <div className="offline"><WifiOff size={13} aria-hidden="true" /> Offline — memakai data tersimpan</div>}
+      {admin && <div className="adminbar">Mode admin aktif — kelola di tab Mingguan/Tukar</div>}
     </>
   );
 }

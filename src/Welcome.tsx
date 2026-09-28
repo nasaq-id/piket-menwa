@@ -224,7 +224,7 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
         />
       )}
       </span>
-      <motion.p className="whint tapHint" {...fade(0.2)}>ketuk logo 1× login manual • 2× login dengan wajah</motion.p>
+      <motion.p className="whint tapHint" {...fade(0.2)}>Ketuk logo 1× login manual • 2× login dengan wajah</motion.p>
       <motion.h1 className="wtitle" {...fade(0.08)}>JURNAL PIKET MENWA USB YPKP TAHUN 2026</motion.h1>
       <motion.p className="wsub" {...fade(0.16)}>Absensi, Jadwal Piket, Bukti Tugas.</motion.p>
       <AnimatePresence initial={false}>
@@ -266,7 +266,7 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.35, delay: 0.4 }}
       >
-        Foto wajah hanya diproses sesaat di server kami, tidak disimpan. Yang disimpan cuma embedding terenkripsi AES-256-GCM.
+        Foto wajah dipakai untuk login & absen. Foto tidak disimpan.
       </motion.p>
     </motion.div>
   );
@@ -586,8 +586,8 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
               <span>Persetujuan Pemrosesan Data Wajah</span>
               <p className="hint">
                 Data wajah dipakai untuk login dan absensi piket. Foto hanya
-                diproses sesaat lalu dibuang; yang disimpan hanya data wajah
-                yang dienkripsi.
+                diproses sesaat lalu dibuang; yang disimpan hanya kode angka wajah
+                (terenkripsi), bukan foto.
               </p>
               <button
                 type="button" className="morebtn"
@@ -599,8 +599,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
               <AnimatePresence initial={false}>
                 {consentMore && (
                   <motion.p
-                    className="hint"
-                    style={{ overflow: 'hidden' }}
+                    className="hint collapser"
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}

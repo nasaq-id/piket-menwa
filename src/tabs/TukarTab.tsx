@@ -57,7 +57,7 @@ export function TukarTab({ store }: { store: AppStore }) {
       ) : (
         <div className="opts2">
           {mySlots.map((d) => (
-            <button key={d} className={`opt ${fromDay === d ? 'sel' : ''}`} onClick={() => pickFrom(d)} style={{ minHeight: '44px' }}>
+            <button key={d} className={`opt ${fromDay === d ? 'sel' : ''}`} onClick={() => pickFrom(d)}>
               <i style={{ background: warna(me) }} />{nama(me)} • {dayDate(d)}
             </button>
           ))}
@@ -68,16 +68,16 @@ export function TukarTab({ store }: { store: AppStore }) {
         {fromDay && (
           <motion.div
             key="step2"
+            className="collapser"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            style={{ overflow: 'hidden' }}
           >
             <h2 className="sec">Langkah 2 — Tukar ke hari</h2>
             <div className="opts2">
               {toDayOpts.map((d) => (
-                <button key={d} className={`opt ${toDay === d ? 'sel' : ''}`} onClick={() => pickTo(d)} style={{ minHeight: '44px' }}>
+                <button key={d} className={`opt ${toDay === d ? 'sel' : ''}`} onClick={() => pickTo(d)}>
                   {dayDate(d)}
                 </button>
               ))}
@@ -90,11 +90,11 @@ export function TukarTab({ store }: { store: AppStore }) {
         {fromDay && toDay && (
           <motion.div
             key="step3"
+            className="collapser"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            style={{ overflow: 'hidden' }}
           >
             <h2 className="sec">Langkah 3 — Dengan siapa</h2>
             <div className="opts1">
@@ -103,7 +103,6 @@ export function TukarTab({ store }: { store: AppStore }) {
                   key={m}
                   className={`opt ${target === m ? 'sel' : ''}`}
                   onClick={() => setTarget(m)}
-                  style={{ minHeight: '44px' }}
                 >
                   <i style={{ background: warna(m) }} />{nama(m)} • {dayDate(toDay)}
                 </button>
@@ -121,42 +120,42 @@ export function TukarTab({ store }: { store: AppStore }) {
       {lengkap && fromDay && toDay && (
         <p className="hint">{fromDay} {dayDate(fromDay)} ⇄ {toDay} {dayDate(toDay)} dengan {nama(target)}</p>
       )}
-      <Button variant="primary" busy={swapBusy} disabled={!lengkap} onClick={() => void submitSwap()} style={{ width: '100%', marginTop: '10px' }}>Kirim permintaan tukar</Button>
+      <Button variant="primary" busy={swapBusy} disabled={!lengkap} onClick={() => void submitSwap()} className="blockbtn">Kirim permintaan tukar</Button>
       {incoming.map((w) => (
-        <div key={w.id} className="waitcard" style={{ flexWrap: 'wrap' }}>
+        <div key={w.id} className="waitcard wrap">
           <i className="pdot" style={{ background: warna(w.requester) }} />
           <span>{nama(w.requester)} meminta tukar<br />{dayDate(w.fromDay)} <ArrowLeftRight size={12} /> {dayDate(w.toDay)}</span>
-          <div className="row waitrow" style={{ flexBasis: '100%', margin: '8px 0 0' }}>
-            <Button variant="primary" onClick={() => void decide(w, true)} style={{ flex: 1 }}>Terima</Button>
-            <Button variant="secondary" onClick={() => void tolakMasuk(w.id, w.requester)} style={{ flex: 1 }}>Tolak</Button>
+          <div className="row waitrow fullrow">
+            <Button variant="primary" onClick={() => void decide(w, true)} className="flex1">Terima</Button>
+            <Button variant="secondary" onClick={() => void tolakMasuk(w.id, w.requester)} className="flex1">Tolak</Button>
           </div>
         </div>
       ))}
       {outgoing.map((w) => (
-        <div key={w.id} className="waitcard" style={{ flexWrap: 'wrap' }}>
+        <div key={w.id} className="waitcard wrap">
           <i className="pdot" style={{ background: warna(w.target) }} />
           <span>Ke {nama(w.target)}<br />{dayDate(w.fromDay)} <ArrowLeftRight size={12} /> {dayDate(w.toDay)} • menunggu</span>
-          <div style={{ flexBasis: '100%', marginTop: '8px' }}>
-            <Button variant="secondary" onClick={() => void cancelSwap(w)} style={{ width: '100%' }}>Batalkan</Button>
+          <div className="stackfull">
+            <Button variant="secondary" onClick={() => void cancelSwap(w)} className="full">Batalkan</Button>
           </div>
         </div>
       ))}
       {admin && othersPending.length > 0 && (
         <>
-          <h2 className="sec">Antrean lain (Admin override)</h2>
+          <h2 className="sec">Antrean lain (Keputusan admin)</h2>
           {othersPending.map((w) => (
             <div key={w.id}>
-              <div className="waitcard" style={{ flexWrap: 'wrap' }}>
+              <div className="waitcard wrap">
                 <i className="pdot" style={{ background: warna(w.requester) }} />
                 <span>{nama(w.requester)} → {nama(w.target)}<br />{dayDate(w.fromDay)} <ArrowLeftRight size={12} /> {dayDate(w.toDay)}</span>
-                <div style={{ flexBasis: '100%', marginTop: '8px' }}>
-                  <Button variant="secondary" onClick={() => setExpanded(expanded === w.id ? null : w.id)} style={{ width: '100%' }}>Aksi admin</Button>
+                <div className="stackfull">
+                  <Button variant="secondary" onClick={() => setExpanded(expanded === w.id ? null : w.id)} className="full">Aksi admin</Button>
                 </div>
               </div>
               {expanded === w.id && (
                 <div className="row waitrow">
-                  <Button variant="primary" onClick={() => { setExpanded(null); void decide(w, true); }} style={{ flex: 1 }}>Setujui</Button>
-                  <Button variant="secondary" onClick={() => { setExpanded(null); void tolakMasuk(w.id, w.requester); }} style={{ flex: 1 }}>Tolak</Button>
+                  <Button variant="primary" onClick={() => { setExpanded(null); void decide(w, true); }} className="flex1">Setujui</Button>
+                  <Button variant="secondary" onClick={() => { setExpanded(null); void tolakMasuk(w.id, w.requester); }} className="flex1">Tolak</Button>
                 </div>
               )}
             </div>

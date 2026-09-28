@@ -244,10 +244,14 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
               <h3>Bukti foto ({ev.length}/{state?.templateLen ?? 0} tugas)</h3>
               <div className="evthumbs">
                 {ev.map((e) => (
-                  <img
-                    key={e.id} src={e.file} alt={e.tugas} title={`${e.tugas} — ${nama(e.memberId)}`}
+                  <button
+                    key={e.id} type="button" className="evthumbbtn"
                     onClick={() => setPreview({ file: e.file, judul: e.tugas, by: nama(e.memberId), tanggal: e.tanggal })}
-                  />
+                    aria-label={`Lihat foto ${e.tugas} oleh ${nama(e.memberId)}`}
+                    title={`${e.tugas} — ${nama(e.memberId)}`}
+                  >
+                    <img src={e.file} alt={e.tugas} />
+                  </button>
                 ))}
               </div>
               {ev.length === 0 && <Empty text="Belum ada foto." />}
@@ -295,14 +299,14 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
                 </table>
               </div>
 
-              <h2>Leaderboard Nilai (rahasia)</h2>
+              <h2>Peringkat Nilai (rahasia)</h2>
               <div className="row">
                 <input type="date" value={lbFrom} onChange={(e) => e.target.value && setLbFrom(e.target.value)} aria-label="Nilai dari tanggal" />
                 <input type="date" value={lbTo} onChange={(e) => e.target.value && setLbTo(e.target.value)} aria-label="Nilai sampai tanggal" />
               </div>
               <div className="supscroll">
                 <table className="suptable">
-                  <thead><tr><th>#</th><th>Nama</th><th>Rata²</th><th>Dinilai</th></tr></thead>
+                  <thead><tr><th>#</th><th>Nama</th><th>Rata-rata</th><th>Dinilai</th></tr></thead>
                   <tbody>
                     {lb.map((r, i) => (
                       <tr key={r.memberId}>

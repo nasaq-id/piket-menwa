@@ -8,7 +8,11 @@ export function PinSheet({ pinInput, setPinInput, submitPin, onClose, busy }: {
   // Drag-untuk-tutup hanya dari kepala sheet supaya tidak bentrok dgn scroll isi.
   const controls = useDragControls();
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('[data-confirm="true"]')) return;
+      onClose();
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
@@ -19,7 +23,7 @@ export function PinSheet({ pinInput, setPinInput, submitPin, onClose, busy }: {
       transition={{ duration: 0.2 }}
     >
       <motion.div
-        className="sheet" role="dialog" aria-modal="true" aria-label="Masuk mode Admin"
+        className="sheet" role="dialog" aria-modal="true" aria-label="Masuk mode admin"
         onClick={(e) => e.stopPropagation()}
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'tween', duration: 0.28, ease: 'easeOut' }}
@@ -32,11 +36,11 @@ export function PinSheet({ pinInput, setPinInput, submitPin, onClose, busy }: {
         <div className="sheethead" onPointerDown={(e) => controls.start(e)}>
           <i className="grabber" />
         </div>
-        <b>Masuk mode Admin</b>
-        <span className="hint">Masukkan PIN Admin (1× per sesi)</span>
+        <b>Masuk mode admin</b>
+        <span className="hint">Masukkan PIN admin (1× per sesi)</span>
         <input
           type="password" inputMode="numeric" autoFocus
-          placeholder="PIN Admin" value={pinInput}
+          placeholder="PIN admin" value={pinInput}
           onChange={(e) => setPinInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void submitPin(); }}
         />

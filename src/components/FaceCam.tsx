@@ -218,9 +218,9 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
             {phase === 'done' && (
               <motion.button key="ok" className="primary" disabled {...pop}>
                 <motion.span
+                  className="inflex"
                   initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }}
                   transition={{ type: 'spring', stiffness: 500, damping: 18 }}
-                  style={{ display: 'inline-flex' }}
                 >
                   <Check size={15} />
                 </motion.span>

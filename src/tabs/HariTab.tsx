@@ -48,7 +48,7 @@ export function HariTab({ store }: { store: AppStore }) {
   };
 
   const lapsitAlasan = !unlocked
-    ? 'Absen dulu (scan wajah di mako) untuk membuka lapsit.'
+    ? 'Absen dulu untuk membuka lapsit.'
     : !buktiLengkap
       ? `Lengkapi ${checks.length} foto bukti dulu.`
       : `Lapsit bisa dikirim mulai ${lapsitOpenAt} (30 menit sebelum piket selesai jam ${jamSelesaiHariIni}).`;
@@ -86,9 +86,9 @@ export function HariTab({ store }: { store: AppStore }) {
           </div>
           <div className="herojam">
             <Clock size={14} />
-            <span className="jlabel">mulai</span><b>{(jamHari.split('–')[0] ?? '').trim()}</b>
+            <span className="jlabel">Mulai</span><b>{(jamHari.split('–')[0] ?? '').trim()}</b>
             <span className="jarrow">→</span>
-            <span className="jlabel">selesai</span><b>{(jamHari.split('–')[1] ?? '').trim()}</b>
+            <span className="jlabel">Selesai</span><b>{(jamHari.split('–')[1] ?? '').trim()}</b>
           </div>
         </div>
       )}
@@ -100,7 +100,7 @@ export function HariTab({ store }: { store: AppStore }) {
             {
               id: 'absen',
               label: 'Absen',
-              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? ' · terlambat' : ''}` : 'scan wajah di mako',
+              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? ' · terlambat' : ''}` : 'scan wajah',
               done: unlocked,
             },
             { id: 'bukti', label: 'Bukti', sub: `${ev.length}/${checks.length}`, done: buktiLengkap },
@@ -116,9 +116,9 @@ export function HariTab({ store }: { store: AppStore }) {
       {today !== 'Libur' && (
         <>
           {mySlots.length === 0 && (
-            <p className="hint">Kamu belum terdaftar sebagai petugas piket minggu ini — minta Admin tambahkan via tab Mingguan (mode Admin).</p>
+            <p className="hint">Kamu belum terdaftar sebagai petugas piket minggu ini — minta admin tambahkan via tab Mingguan (mode admin).</p>
           )}
-          <div id="sec-absen" style={{ scrollMarginTop: '12px' }}>
+          <div id="sec-absen" className="anchor">
           <AnimatePresence mode="wait" initial={false}>
             {crew.includes(me) && !unlocked && (
               <motion.div
@@ -131,7 +131,7 @@ export function HariTab({ store }: { store: AppStore }) {
                   busy={absenBusy}
                   onClick={() => void needVerify()}
                   ariaLabel="Absen tiba dengan scan wajah di mako"
-                  style={{ width: '100%', marginTop: '10px' }}
+                  className="blockbtn"
                 >
                   {absenBusy
                     ? <><MapPin size={15} /> Mengecek lokasi…</>
@@ -139,7 +139,7 @@ export function HariTab({ store }: { store: AppStore }) {
                 </Button>
                 {jamMulai && (
                   <p className="hint">
-                    Absen dibuka {geserJam(jamMulai, -ABSEN_BUKA_MENIT)}–{jamSelesai}. Lewat {geserJam(jamMulai, ABSEN_TELAT_MENIT)} tercatat terlambat. Wajib di area mako (GPS aktif).
+                    Absen dibuka {geserJam(jamMulai, -ABSEN_BUKA_MENIT)}–{jamSelesai}. Lewat {geserJam(jamMulai, ABSEN_TELAT_MENIT)} tercatat terlambat. Wajib di area mako (markas komando, GPS aktif).
                   </p>
                 )}
               </motion.div>
@@ -155,8 +155,8 @@ export function HariTab({ store }: { store: AppStore }) {
             )}
           </AnimatePresence>
           </div>
-          <div className="bdgroup" id="sec-bukti" style={{ scrollMarginTop: '12px' }}>
-            <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)} aria-expanded={buktiOpen} style={{ minHeight: '44px' }}>
+          <div className="bdgroup anchor" id="sec-bukti">
+            <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)} aria-expanded={buktiOpen}>
               <span>Bukti Piket (Wajib)</span>
               <em>{ev.length}/{checks.length}</em>
               <ChevronDown size={16} className={buktiOpen ? 'rot' : ''} />
@@ -164,18 +164,18 @@ export function HariTab({ store }: { store: AppStore }) {
             <AnimatePresence initial={false}>
               {buktiOpen && (
                 <motion.div
+                  className="collapser"
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.22, ease: 'easeOut' }}
-                  style={{ overflow: 'hidden' }}
                 >
                   {checks.length > 0 && (
                     <div className="progress buktiProg" role="progressbar" aria-valuenow={doneCount} aria-valuemin={0} aria-valuemax={checks.length} aria-label="Progress bukti piket">
                       <i style={{ width: `${(doneCount / checks.length) * 100}%` }} />
                     </div>
                   )}
-                  {!unlocked && <p className="hint"><Lock size={12} /> Absen dulu (scan wajah di mako) untuk membuka bukti.</p>}
+                  {!unlocked && <p className="hint"><Lock size={12} /> Absen dulu untuk membuka bukti.</p>}
                   <ul className="tasks">
                     {checks.map((c) => {
                       const ph = ev.find((e) => e.tugas === c.judul);
@@ -185,6 +185,12 @@ export function HariTab({ store }: { store: AppStore }) {
                           key={c.judul}
                           className={unlocked ? '' : 'locked'}
                           onClick={() => taskTap(c)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${c.judul}${ph ? ' — foto terkirim' : ' — ketuk untuk ambil foto'}`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); taskTap(c); }
+                          }}
                         >
                           <button
                             className="cam"
@@ -216,8 +222,8 @@ export function HariTab({ store }: { store: AppStore }) {
             </AnimatePresence>
           </div>
           <div className="bdgroup top">
-            <button className="bdhead" onClick={() => setBdSecOpen((v) => !v)} aria-expanded={bdSecOpen} style={{ minHeight: '44px' }}>
-              <span>Rincian Tugas (Opsional · ikut nilai)</span>
+            <button className="bdhead" onClick={() => setBdSecOpen((v) => !v)} aria-expanded={bdSecOpen}>
+              <span>Rincian Tugas (Opsional · Ikut nilai)</span>
               <em>{bdDone.length}/{BREAKDOWN.reduce((s, g) => s + g.items.length, 0)}</em>
               <ChevronDown size={16} className={bdSecOpen ? 'rot' : ''} />
             </button>
@@ -225,11 +231,11 @@ export function HariTab({ store }: { store: AppStore }) {
           <AnimatePresence initial={false}>
             {bdSecOpen && (
               <motion.div
+                className="collapser"
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                style={{ overflow: 'hidden' }}
               >
                 <p className="hint">
                   Tercatat di server, ikut menentukan nilai piketmu.
@@ -240,7 +246,7 @@ export function HariTab({ store }: { store: AppStore }) {
                   const open = !!bdOpen[gi];
                   return (
                     <div key={gi} className="bdgroup">
-                      <button className="bdhead" onClick={() => setBdOpen((o) => ({ ...o, [gi]: !o[gi] }))} aria-expanded={open} style={{ minHeight: '44px' }}>
+                      <button className="bdhead" onClick={() => setBdOpen((o) => ({ ...o, [gi]: !o[gi] }))} aria-expanded={open}>
                         <span>{gi + 1}. {g.title}</span>
                         <em>{done}/{g.items.length}</em>
                         <ChevronDown size={16} className={open ? 'rot' : ''} />
@@ -248,18 +254,28 @@ export function HariTab({ store }: { store: AppStore }) {
                       <AnimatePresence initial={false}>
                         {open && (
                           <motion.ul
-                            className="tasks"
+                            className="tasks collapser"
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
                             transition={{ duration: 0.22, ease: 'easeOut' }}
-                            style={{ overflow: 'hidden' }}
                           >
                             {g.items.map((it, ii) => {
                               const k = `${gi}:${ii}`;
                               const on = bdDone.includes(k);
                               return (
-                                <li key={k} className={unlocked ? '' : 'locked'} onClick={() => toggleBd(k)}>
+                                <li
+                                  key={k}
+                                  className={unlocked ? '' : 'locked'}
+                                  onClick={() => toggleBd(k)}
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-pressed={on}
+                                  aria-label={`${it}${on ? ' — sudah dicentang' : ''}`}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBd(k); }
+                                  }}
+                                >
                                   <span className={`box ${on ? 'on' : ''}`}>{on ? <Check size={13} /> : ''}</span>
                                   <span className={on ? 'strike' : ''}>{it}</span>
                                 </li>
@@ -274,8 +290,8 @@ export function HariTab({ store }: { store: AppStore }) {
               </motion.div>
             )}
           </AnimatePresence>
-          <div id="sec-lapsit" style={{ scrollMarginTop: '12px' }}>
-          <h2>Catatan Lapsit — Akhir Piket</h2>
+          <div id="sec-lapsit" className="anchor">
+          <h2>Catatan Lapsit (laporan situasi) — Akhir Piket</h2>
           {myLapsitSent ? (
             lapsit.map((l) => (
               <div key={l.id} className="card sm">
@@ -299,7 +315,7 @@ export function HariTab({ store }: { store: AppStore }) {
                 busy={lapsitBusy}
                 disabled={!unlocked || ev.length < checks.length || checks.length === 0 || !lapsitOpen}
                 onClick={() => void kirimLapsit()}
-                style={{ width: '100%', marginTop: '10px' }}
+                className="blockbtn"
               >
                 Kirim lapsit akhir piket
               </Button>

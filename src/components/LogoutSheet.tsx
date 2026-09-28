@@ -22,7 +22,12 @@ export function LogoutSheet({
   // Drag-untuk-tutup hanya dari kepala sheet supaya tidak bentrok dgn scroll isi.
   const controls = useDragControls();
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Kalau ConfirmSheet teratas terbuka (mis. konfirmasi Keluar), Esc hanya untuknya.
+      if (document.querySelector('[data-confirm="true"]')) return;
+      onClose();
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);

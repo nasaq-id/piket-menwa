@@ -20,7 +20,11 @@ export function KontakSheet({ forced, onSave, onClose }: {
   const controls = useDragControls();
   useEffect(() => {
     if (forced) return;
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('[data-confirm="true"]')) return;
+      onClose();
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [forced, onClose]);

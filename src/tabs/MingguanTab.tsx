@@ -40,8 +40,8 @@ export function MingguanTab({ store }: { store: AppStore }) {
         <div className="weeknav">
           <b>{rangeLabel}</b>
           <span>
-            <Button variant="secondary" ariaLabel="Minggu sebelumnya" onClick={() => setWeekOff((w) => w - 1)} style={{ width: '44px', padding: 0 }}>‹</Button>
-            <Button variant="secondary" ariaLabel="Minggu berikutnya" onClick={() => setWeekOff((w) => w + 1)} style={{ width: '44px', padding: 0 }}>›</Button>
+            <Button variant="secondary" ariaLabel="Minggu sebelumnya" onClick={() => setWeekOff((w) => w - 1)} className="weeknavbtn">‹</Button>
+            <Button variant="secondary" ariaLabel="Minggu berikutnya" onClick={() => setWeekOff((w) => w + 1)} className="weeknavbtn">›</Button>
           </span>
         </div>
         {admin && weekOff !== 0 ? (
@@ -81,18 +81,18 @@ export function MingguanTab({ store }: { store: AppStore }) {
                   {admin && (
                     <span className="dedit">
                       {crewIds.map((id) => (
-                        <Button key={id} variant="secondary" ariaLabel={`Hapus ${nama(id)} dari ${d}`} onClick={() => void hapusPetugas(d, id)} style={{ minHeight: '44px' }}>{nama(id)} <X size={11} /></Button>
+                        <Button key={id} variant="secondary" ariaLabel={`Hapus ${nama(id)} dari ${d}`} onClick={() => void hapusPetugas(d, id)}>{nama(id)} <X size={11} /></Button>
                       ))}
                       <button className="addbtn" onClick={() => setPickDay(pickDay === d ? null : d)}>
                         <Plus size={13} /> Tambah personel
                       </button>
                       <span className="jamrow">
                         <Clock size={13} />
-                        <label>mulai
+                        <label>Mulai
                           <input type="time" value={jamColon(d, 0)} onChange={(e) => void setJam(d, 'mulai', e.target.value)} />
                         </label>
                         <span className="dash">–</span>
-                        <label>selesai
+                        <label>Selesai
                           <input type="time" value={jamColon(d, 1)} onChange={(e) => void setJam(d, 'selesai', e.target.value)} />
                         </label>
                       </span>
@@ -117,10 +117,13 @@ export function MingguanTab({ store }: { store: AppStore }) {
                   {(weekEv[ds] ?? []).length > 0 && (
                     <span className="dayph">
                       {(weekEv[ds] ?? []).map((e) => (
-                        <img
-                          key={e.id} src={e.file} alt={e.tugas}
+                        <button
+                          key={e.id} type="button" className="thumbbtn"
                           onClick={() => setPreview({ file: e.file, judul: e.tugas, by: nama(e.memberId), tanggal: ds })}
-                        />
+                          aria-label={`Lihat foto ${e.tugas}`}
+                        >
+                          <img src={e.file} alt={e.tugas} />
+                        </button>
                       ))}
                     </span>
                   )}
@@ -146,14 +149,14 @@ export function MingguanTab({ store }: { store: AppStore }) {
           ))}
         </div>
       )}
-      {admin && <button className="rotbtn" onClick={putarRotasi}><Repeat size={14} /> Putar rotasi minggu depan (Admin)</button>}
+      {admin && <button className="rotbtn" onClick={putarRotasi}><Repeat size={14} /> Putar rotasi minggu depan (admin)</button>}
       {admin && (
         <>
           <h2 className="sec">Anggota terdaftar ({members.length})</h2>
           {!store.state?.fromApi
             ? <p className="hint">Butuh online untuk lihat pendaftar.</p>
             : members.length === 0
-              ? <p className="hint">Belum ada yang daftar — suruh buka tab Hari Ini → Daftar.</p>
+              ? <p className="hint">Belum ada yang daftar — pendaftaran ada di halaman login (tombol Daftar).</p>
               : members.map((m) => {
                 const n = faces.find((f) => f.memberId === m.id)?.count ?? 0;
                 return (

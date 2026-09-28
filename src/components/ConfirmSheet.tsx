@@ -9,7 +9,7 @@ export interface ConfirmRequest {
   danger: boolean;
 }
 
-// Bottom sheet konfirmasi berbasis Promise (lihat useAppStore.ask).
+// Bottom sheet konfirmasi berbasis Promise (lihat hooks/useConfirm.ts).
 // Gaya .sheetwrap/.sheet yang sama dgn sheet lain, animasi framer-motion.
 export function ConfirmSheet({ req, onResolve }: {
   req: ConfirmRequest | null;
@@ -19,9 +19,16 @@ export function ConfirmSheet({ req, onResolve }: {
   const controls = useDragControls();
   useEffect(() => {
     if (!req) return;
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onResolve(false); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // ConfirmSheet selalu paling atas: telan Esc supaya sheet di bawahnya
+      // (mis. Profil → Keluar) tidak ikut tertutup.
+      e.stopImmediatePropagation();
+      e.stopPropagation();
+      onResolve(false);
+    };
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
   }, [req, onResolve]);
   return (
     <AnimatePresence>
@@ -33,6 +40,7 @@ export function ConfirmSheet({ req, onResolve }: {
         >
           <motion.div
             className="sheet" role="dialog" aria-modal="true" aria-label={req.title}
+            data-confirm="true"
             onClick={(e) => e.stopPropagation()}
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'tween', duration: 0.28, ease: 'easeOut' }}
