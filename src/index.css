@@ -61,9 +61,8 @@ body { margin:0; background:#070a09; color:var(--ink); font-family: system-ui,-a
 .whint { color:var(--dim); font-size:12px; }
 .whint.dim { opacity:.65; font-size:11px; }
 .wsecure {
-  position:absolute; left:50%; bottom:-50px; transform:translateX(-50%);
-  color:var(--dim); opacity:.75; font-size:10.5px; line-height:1.4;
-  max-width:320px; text-align:center;
+  color:var(--dim); font-size:12px; line-height:1.5;
+  max-width:320px; text-align:center; margin:8px 0 0;
 }
 .wlink.dim { font-weight:400; opacity:.8; }
 /* ---- Sheet PIN login ---- */
@@ -83,33 +82,35 @@ body { margin:0; background:#070a09; color:var(--ink); font-family: system-ui,-a
 .pinmsg.ok { color:#4ade80; }
 .pinmsg.err { color:var(--danger); }
 /* ---- Tactical HUD (eksperimen halaman register) ---- */
-.welcome.tac { font-family:ui-monospace, Menlo, Consolas, monospace; border:1px solid rgba(74,222,128,.25); border-radius:6px; background:repeating-linear-gradient(0deg, rgba(74,222,128,.03) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 0%, rgba(74,222,128,.08), transparent 60%), var(--bg); }
+.welcome.tac { font-family:ui-monospace, Menlo, Consolas, monospace; border:1px solid rgba(74,222,128,.25); border-radius:var(--radius); background:repeating-linear-gradient(0deg, rgba(74,222,128,.03) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 0%, rgba(74,222,128,.08), transparent 60%), var(--bg); }
 .tac h1 { color:var(--accent); text-transform:uppercase; letter-spacing:2px; font-size:20px; }
-.tac h1::after { content:'_'; animation:blink 1s steps(1) infinite; }
+/* Kursor berkedip: hanya judul halaman login (fase 5). */
+.welcome--login .wtitle::after { content:'_'; animation:blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity:0; } }
+@media (prefers-reduced-motion: reduce) { .welcome--login .wtitle::after { animation:none; } }
 .tac .wsub { color:#86efac; opacity:.7; }
 .tac .wfield { color:var(--accent); }
 .tac .wfield > span { text-transform:uppercase; letter-spacing:1.5px; font-size:11px; }
 .tac .wfield > span::before { content:'>> '; }
-.tac .wfield input, .tac .wfield select { background:#0a0f0d; border:1px solid rgba(74,222,128,.4); border-radius:3px; color:var(--accent); font-family:inherit; }
+.tac .wfield input, .tac .wfield select { background:#0a0f0d; border:1px solid rgba(74,222,128,.4); border-radius:2px; color:var(--accent); font-family:inherit; }
 .tac .wfield input:focus, .tac .wfield select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 8px rgba(74,222,128,.35); }
 .tac .wfield input::placeholder { color:rgba(74,222,128,.35); }
-.tac .jabcard { border-radius:3px; background:rgba(74,222,128,.04); border-color:rgba(74,222,128,.3); color:#bbf7d0; font-family:inherit; }
+.tac .jabcard { border-radius:2px; background:rgba(74,222,128,.04); border-color:rgba(74,222,128,.3); color:#bbf7d0; font-family:inherit; }
 .tac .jabcard.sel { background:rgba(74,222,128,.15); border-color:var(--accent); color:var(--accent); box-shadow:0 0 10px rgba(74,222,128,.25); }
 .tac .jabcard svg { color:var(--accent); }
-.tac .wbtn { background:var(--accent); color:var(--on-accent); border-radius:3px; text-transform:uppercase; letter-spacing:2px; font-family:inherit; }
+.tac .wbtn { background:var(--accent); color:var(--on-accent); border-radius:2px; text-transform:uppercase; letter-spacing:2px; font-family:inherit; }
 .tac .wbtn.ghost { background:transparent; color:var(--accent); border:1px solid rgba(74,222,128,.5); }
 .tac .werr { color:var(--danger); }
-/* register: semua radius 0 */
+/* register: samakan dgn halaman login & token (fase 5) */
 .welcome.tac .wfield input, .welcome.tac .wfield select,
 .welcome.tac .jabcard,
-.welcome.tac .wbtn, .welcome.tac .dupebox, .welcome.tac .wlogo { border-radius:0; }
+.welcome.tac .wbtn, .welcome.tac .dupebox, .welcome.tac .wlogo { border-radius:var(--radius); }
 .wfield { display:flex; flex-direction:column; gap:6px; width:100%; text-align:left; font-size:13px; color:var(--dim); margin-top:6px; }
 .wfield input { background:var(--card); border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:13px; font-size:16px; width:100%; }
 .wfield select { background:var(--card); border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:13px; font-size:16px; width:100%; }
 /* kartu jabatan */
 .jabgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.jabcard { display:flex; align-items:center; gap:8px; background:transparent; border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:12px; font-size:13px; cursor:pointer; text-align:left; }
+.jabcard { display:flex; align-items:center; gap:8px; background:transparent; border:1px solid var(--line); color:var(--ink); border-radius:12px; padding:12px; min-height:44px; font-size:13px; cursor:pointer; text-align:left; }
 .jabcard svg { color:var(--dim); flex:none; }
 .jabcard.sel { border-color:var(--accent); background:#1c2422; }
 .jabcard.sel svg { color:var(--ink); }
@@ -415,8 +416,8 @@ button:active { transform:scale(.97); }
 .camcard .hint.turnmsg { color:#4ade80; font-size:16px; font-weight:700; text-align:center; }
 
 /* Logo = tombol login (ketuk 1× manual, 2× wajah) */
-.wlogotap { background:none; border:none; padding:0; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
-.tapHint { margin-top:-4px; font-size:11px; opacity:.55; }
+.wlogotap { position:relative; background:none; border:none; padding:0; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.tapHint { margin-top:-4px; font-size:12px; color:var(--dim); }
 .wfield .hint.ok { color:#4ade80; }
 .attrow .badge-no.late { color:var(--danger); background:rgba(248,113,113,.12); }
 .makopanel { display:flex; flex-direction:column; gap:8px; text-align:left; }
@@ -457,3 +458,18 @@ button:active { transform:scale(.97); }
 .tac .stepbg { background:rgba(74,222,128,.08); }
 .tac .step { border-radius:2px; }
 .tac .stepbg { border-radius:2px; }
+
+/* ---- Fase 5: sisa sudut membulat diseragamkan ke token --radius (2px di .tac) ---- */
+.tac .toast, .tac .dragcol, .tac .dragcard, .tac .dupebox, .tac .wlogo,
+.tac .camcard video { border-radius:var(--radius); }
+.tac .wmwrap .wm { border-radius:var(--radius); }
+.tac .picklist button { border-radius:var(--radius); }
+
+/* ---- Fase 5: login & daftar ---- */
+.wlogowrap { position:relative; display:inline-grid; place-items:center; }
+.wlogoring { position:absolute; inset:-8px; border:2px solid var(--accent); border-radius:36px; pointer-events:none; }
+.tac .wlogoring { border-radius:10px; }
+.loginform .btn { margin-top:6px; width:100%; }
+.welcome .row .btn { margin-top:0; flex:1; }
+.dupebox .btn { margin-top:6px; width:100%; }
+.morebtn { align-self:flex-start; background:none; border:none; color:var(--accent); font-size:13px; font-weight:700; text-decoration:underline; cursor:pointer; min-height:44px; min-width:44px; padding:10px 12px 10px 0; font-family:inherit; }

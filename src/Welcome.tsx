@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Award, Briefcase, ClipboardList, FileText, Flag, KeyRound, Medal, PenLine, ScanFace, Shield, Sprout, Users } from 'lucide-react';
 import { z } from 'zod';
 import { checkKontak, type AuthType } from './api';
+import { Button } from './components/Button';
 import { ShakeErr, TAP } from './components/Motion';
 
 export const JABATAN_LIST = [
@@ -149,6 +150,9 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Riak sentuh logo: umpan balik langsung saat pointerdown (framer-motion).
+  // Logika bedakan 1×/2× tetap lewat onLogoTap + jeda TAP_WINDOW.
+  const [ping, setPing] = useState(0);
   // Bedakan ketuk 1× vs 2×: tunggu sebentar setelah ketukan pertama.
   const TAP_WINDOW = 300;
   const tapTimer = useRef<number | undefined>(undefined);
@@ -188,16 +192,18 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   });
   return (
     <motion.div
-      className="welcome"
+      className="welcome welcome--login"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.35 }}
     >
+      <span className="wlogowrap">
       <motion.button
         type="button"
         className="wlogo wlogotap"
         aria-label="Ketuk 1 kali untuk login manual, 2 kali untuk login dengan wajah"
         onClick={onLogoTap}
+        onPointerDown={() => setPing((p) => p + 1)}
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         whileTap={{ scale: 0.92 }}
@@ -207,8 +213,19 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
           ? <img src="/brand/logo-menwa.png" alt="Logo Menwa" onError={() => setLogoOk(false)} />
           : <Shield size={52} />}
       </motion.button>
-      <motion.p className="whint dim tapHint" {...fade(0.2)}>ketuk logo 1× login manual • 2× login dengan wajah</motion.p>
-      <motion.h1 {...fade(0.08)}>JURNAL PIKET MENWA USB YPKP TAHUN 2026</motion.h1>
+      {ping > 0 && (
+        <motion.span
+          key={ping}
+          className="wlogoring"
+          aria-hidden="true"
+          initial={{ opacity: 0.7, scale: 0.85 }}
+          animate={{ opacity: 0, scale: 1.12 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+        />
+      )}
+      </span>
+      <motion.p className="whint tapHint" {...fade(0.2)}>ketuk logo 1× login manual • 2× login dengan wajah</motion.p>
+      <motion.h1 className="wtitle" {...fade(0.08)}>JURNAL PIKET MENWA USB YPKP TAHUN 2026</motion.h1>
       <motion.p className="wsub" {...fade(0.16)}>Absensi, Jadwal Piket, Bukti Tugas.</motion.p>
       <AnimatePresence initial={false}>
         {showForm && (
@@ -234,9 +251,9 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
             autoComplete="current-password"
           />
           <ShakeErr msg={err} />
-          <motion.button className="wbtn" type="submit" disabled={busy} {...TAP}>
-            <KeyRound size={18} /> {busy ? 'Memeriksa…' : 'Masuk'}
-          </motion.button>
+          <Button variant="primary" type="submit" busy={busy}>
+            <KeyRound size={18} /> Masuk
+          </Button>
         </motion.form>
         )}
       </AnimatePresence>
@@ -299,7 +316,7 @@ export function NbpField({ value, onChange, onEnter }: { value: string; onChange
   const angkatan = angkatanFromNbp(value);
   return (
     <label className="wfield">
-      <span>NBP Menwa</span>
+      <span>NBP (Nomor Buku Pokok) Menwa</span>
       <input
         inputMode="numeric" maxLength={14}
         placeholder="cth: 1494.08.148031" value={value}
@@ -374,6 +391,8 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
   const [secret2, setSecret2] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Teks lengkap persetujuan dibuka lewat "Selengkapnya" (framer-motion height).
+  const [consentMore, setConsentMore] = useState(false);
   // Placeholder animasi dari nama pendaftar beneran (bukan hardcode).
   const [phAnim, setPhAnim] = useState('');
   const namesKey = names.join('|');
@@ -566,13 +585,36 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
             <div className="wfield consent">
               <span>Persetujuan Pemrosesan Data Wajah</span>
               <p className="hint">
-                Sesuai UU No. 27/2022 (Pelindungan Data Pribadi), wajah adalah data pribadi
-                spesifik. Saat scan, foto wajah dikirim ke server aplikasi ini (bukan pihak
-                ketiga) hanya untuk diproses sesaat lalu dibuang — TIDAK disimpan. Yang
-                disimpan cuma embedding (representasi angka) terenkripsi AES-256-GCM.
-                Wajah dipakai untuk verifikasi login dan absensi kehadiran piket, jadi
-                wajib untuk semua anggota.
+                Data wajah dipakai untuk login dan absensi piket. Foto hanya
+                diproses sesaat lalu dibuang; yang disimpan hanya data wajah
+                yang dienkripsi.
               </p>
+              <button
+                type="button" className="morebtn"
+                onClick={() => setConsentMore((v) => !v)}
+                aria-expanded={consentMore}
+              >
+                {consentMore ? 'Sembunyikan' : 'Selengkapnya'}
+              </button>
+              <AnimatePresence initial={false}>
+                {consentMore && (
+                  <motion.p
+                    className="hint"
+                    style={{ overflow: 'hidden' }}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                  >
+                    Sesuai UU No. 27/2022 (Pelindungan Data Pribadi), wajah adalah data pribadi
+                    spesifik. Saat scan, foto wajah dikirim ke server aplikasi ini (bukan pihak
+                    ketiga) hanya untuk diproses sesaat lalu dibuang — TIDAK disimpan. Yang
+                    disimpan cuma embedding (representasi angka) terenkripsi AES-256-GCM.
+                    Wajah dipakai untuk verifikasi login dan absensi kehadiran piket, jadi
+                    wajib untuk semua anggota.
+                  </motion.p>
+                )}
+              </AnimatePresence>
               <div className="consentgrid">
                 <button
                   type="button"
@@ -616,16 +658,16 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
         <div className="dupebox">
           <b>Akun anda sudah terdaftar.</b>
           <span>Nama + angkatan {angkatan} ini sudah ada di sistem. Silakan login.</span>
-          <button className="wbtn" onClick={onCancel}>Ke login</button>
+          <Button variant="primary" onClick={onCancel}>Ke login</Button>
         </div>
       )}
       <div className="row">
         {step > 0
-          ? <button className="wbtn ghost" onClick={() => void go(-1)}>Sebelumnya</button>
-          : <button className="wbtn ghost" onClick={onCancel}>TUTUP</button>}
+          ? <Button variant="secondary" onClick={() => void go(-1)}>Sebelumnya</Button>
+          : <Button variant="secondary" onClick={onCancel}>Tutup</Button>}
         {step < LAST
-          ? <button className="wbtn" disabled={dupe || busy} onClick={() => void go(1)}>{busy ? 'Memeriksa…' : 'Lanjut'}</button>
-          : <button className="wbtn" disabled={dupe} onClick={submit}>Lanjut scan wajah</button>}
+          ? <Button variant="primary" busy={busy} disabled={dupe} onClick={() => void go(1)}>Lanjut</Button>
+          : <Button variant="primary" disabled={dupe} onClick={submit}>Lanjut scan wajah</Button>}
       </div>
     </motion.div>
   );
