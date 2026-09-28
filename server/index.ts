@@ -1277,13 +1277,13 @@ const nilaiKomponen = (tanggal: string, memberId: string) => {
     .where(and(eq(breakdown.tanggal, tanggal), eq(breakdown.memberId, memberId))).all();
   const rincian = rowsBd.length;
   const rincianKeys = rowsBd.map((r) => r.itemKey);
-  const lapsit = db.select().from(lapsit)
+  const adaLapsit = db.select().from(lapsit)
     .where(and(eq(lapsit.tanggal, tanggal), eq(lapsit.memberId, memberId))).all().length > 0;
   const fotoScore = Math.min(1, foto / fotoMax) * 60;
   const bdScore = Math.min(1, rincian / BREAKDOWN_TOTAL) * 30;
-  const lapsitScore = lapsit ? 10 : 0;
+  const lapsitScore = adaLapsit ? 10 : 0;
   const nilai = Math.round((fotoScore + bdScore + lapsitScore) * 100) / 100;
-  return { foto, fotoMax, rincian, rincianMax: BREAKDOWN_TOTAL, rincianKeys, lapsit, nilai };
+  return { foto, fotoMax, rincian, rincianMax: BREAKDOWN_TOTAL, rincianKeys, lapsit: adaLapsit, nilai };
 };
 
 const nilaiOtomatis = (tanggal: string, memberId: string): number => nilaiKomponen(tanggal, memberId).nilai;
