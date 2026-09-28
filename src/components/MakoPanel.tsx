@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { Crosshair, MapPin } from 'lucide-react';
 import { loadMako, superPut } from '../api';
 import { getGeo } from '../bukti';
-import { ShakeErr, TAP } from './Motion';
+import { Button } from './Button';
+import { ShakeErr } from './Motion';
 
 // Superadmin: titik mako untuk geofence absen. Cara termudah: berdiri di
 // mako, tap "Pakai lokasi saya sekarang", atur radius, simpan.
@@ -68,9 +69,9 @@ export function MakoPanel() {
         )}
       </AnimatePresence>
       <div className="row">
-        <motion.button onClick={() => void pakaiLokasi()} disabled={busy} {...TAP}>
+        <Button variant="secondary" busy={busy} onClick={() => void pakaiLokasi()}>
           <Crosshair size={15} /> {busy && !draft ? 'Membaca GPS…' : 'Pakai lokasi saya sekarang'}
-        </motion.button>
+        </Button>
       </div>
       <label className="wfield">
         <span>Radius (meter)</span>
@@ -82,7 +83,7 @@ export function MakoPanel() {
           <motion.p className="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{msg}</motion.p>
         )}
       </AnimatePresence>
-      <motion.button className="primary" onClick={() => void simpan()} disabled={busy || !shown} {...TAP}>Simpan lokasi mako</motion.button>
+      <Button variant="primary" busy={busy} disabled={!shown} onClick={() => void simpan()}>Simpan lokasi mako</Button>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { AliasField, NbpField, WaField, identitySchema } from '../Welcome';
-import { ShakeErr, TAP } from './Motion';
+import { Button } from './Button';
+import { ShakeErr } from './Motion';
 
 // Isi/ubah No. WA + alias + NBP. `forced` = akun lama yang belum punya WA: tidak bisa
 // ditutup sebelum tersimpan (WA jadi identitas login berikutnya).
@@ -46,10 +47,10 @@ export function KontakSheet({ forced, onSave, onClose }: {
         <WaField value={wa} onChange={setWa} />
         <AliasField value={alias} onChange={setAlias} onEnter={() => void submit()} />
         <ShakeErr msg={err} />
-        <motion.button className="primary" disabled={busy} onClick={() => void submit()} {...TAP}>
+        <Button variant="primary" busy={busy} onClick={() => void submit()}>
           {busy ? 'Menyimpan…' : 'Simpan'}
-        </motion.button>
-        {!forced && <motion.button className="ghostbtn" onClick={onClose} {...TAP}>Batal</motion.button>}
+        </Button>
+        {!forced && <Button variant="secondary" onClick={onClose}>Batal</Button>}
       </motion.div>
     </motion.div>
   );

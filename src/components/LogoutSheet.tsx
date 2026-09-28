@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { RefObject } from 'react';
 import type { AuthType, Member } from '../api';
 import { SecretField } from '../Welcome';
-import { TAP } from './Motion';
+import { Button } from './Button';
 
 export function LogoutSheet({
   member, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, onSaveSecret, onEditKontak,
@@ -55,8 +55,8 @@ export function LogoutSheet({
           onEnter={onSaveSecret} autoComplete="new-password"
         />
         <div className="pinrow">
-          <motion.button onClick={onSaveSecret} {...TAP}>Simpan {secretType === 'pin' ? 'PIN' : 'password'}</motion.button>
-          <motion.button onClick={onEditKontak} {...TAP}>Ubah NBP / WA / alias</motion.button>
+          <Button variant="secondary" onClick={onSaveSecret}>Simpan {secretType === 'pin' ? 'PIN' : 'password'}</Button>
+          <Button variant="secondary" onClick={onEditKontak}>Ubah NBP / WA / alias</Button>
           <AnimatePresence mode="wait">
             {secretMsg && (
               <motion.span
@@ -69,8 +69,8 @@ export function LogoutSheet({
             )}
           </AnimatePresence>
         </div>
-        <button className="danger" onClick={onLogout}>Logout</button>
-        <button className="ghostbtn" onClick={onClose}>Batal</button>
+        <Button variant="danger" onClick={onLogout}>Logout</Button>
+        <Button variant="secondary" onClick={onClose}>Batal</Button>
       </motion.div>
     </motion.div>
   );
