@@ -3,7 +3,7 @@ import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
   dropPush, ensurePush, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
   loadNilaiToday, requestChallenge,
-  loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginFace, markAttendance, ping,
+  loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginEnrollFace, loginIdentify, markAttendance, ping,
   registerMember, saveRosterRemote, saveWeekRosterRemote, setKontak, setLoginSecret, setProfilePhoto, submitLapsit,
   toggleBreakdown, uploadEvidence, verifyPin,
   type AppState, type AttRow, type AuthType, type EvidenceRow, type FaceSummary, type LapsitRow,
@@ -49,10 +49,12 @@ export function useAppStore() {
   const [faces, setFaces] = useState<FaceSummary[]>([]);
   const [att, setAtt] = useState<AttRow[]>([]);
   const [unlocked, setUnlocked] = useState(false); // wajah terverifikasi sesi ini
-  // Kamera scan wajah: daftar, langkah 2 login (NBP/WA/alias + PIN), atau absen piket.
-  const [cam, setCam] = useState<null | { mode: 'absen' | 'login' | 'register' }>(null);
+  // Kamera scan wajah: daftar, login pakai wajah (identify), daftar ulang wajah
+  // setelah login manual (enroll), atau absen piket.
+  const [cam, setCam] = useState<null | { mode: 'absen' | 'identify' | 'enroll' | 'register' }>(null);
   // Hasil langkah 1 login (kredensial lolos) — menunggu verifikasi wajah.
-  const [pendingLogin, setPendingLogin] = useState<{ preToken: string; memberId: string; nama: string; needEnroll: boolean } | null>(null);
+  // Login manual lolos tapi akun belum punya template wajah → tunggu daftar ulang wajah.
+  const [pendingLogin, setPendingLogin] = useState<{ preToken: string; memberId: string; nama: string } | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [me, setMe] = useState(() => {
     // Sesi hanya berlaku 1 hari → tiap hari wajib verifikasi wajah ulang.
@@ -108,12 +110,22 @@ export function useAppStore() {
     if (!state?.fromApi) return { ok: false, error: 'Butuh online untuk masuk.' };
     const r = await loginCredential(ident, secret);
     if (!r.ok) return r;
-    setPendingLogin(r.data);
-    setCam({ mode: 'login' });
+    if (r.data.needEnroll) {
+      setPendingLogin(r.data);
+      setCam({ mode: 'enroll' });
+      setToast({ msg: 'Wajahmu belum terdaftar — scan wajah sekali untuk absen nanti.', kind: 'info' });
+      return { ok: true };
+    }
+    enterAs(r.data.memberId, r.data.nama);
     return { ok: true };
   };
 
-  // Login selesai (kredensial + wajah). Checklist TIDAK otomatis terbuka —
+  const faceLogin = () => {
+    if (!state?.fromApi) return alert('Butuh online untuk masuk.');
+    setCam({ mode: 'identify' });
+  };
+
+  // Login selesai (manual atau wajah). Checklist TIDAK otomatis terbuka —
   // itu hanya lewat absen (verifikasi wajah baru di mako), kecuali sesi ini
   // sudah absen sebelumnya.
   const enterAs = (memberId: string, namaV: string) => {
@@ -518,23 +530,32 @@ export function useAppStore() {
     setShowLogout(false);
   };
 
+  // Wizard tetap terpasang di bawah kamera: scan ditutup/gagal → isian utuh.
   const onProfileDone = (p: Profile) => {
     setRegProfile(p);
-    setProfiling(false);
     setCam({ mode: 'register' });
   };
 
   // ---- Scan wajah: tiap mode punya cara minta challenge & kirim frame ----
   const faceChallenge = () => {
-    if (cam?.mode === 'login') return requestChallenge('login', { preToken: pendingLogin?.preToken });
+    if (cam?.mode === 'enroll') return requestChallenge('login', { preToken: pendingLogin?.preToken });
+    if (cam?.mode === 'identify') return requestChallenge('identify');
     if (cam?.mode === 'absen') return requestChallenge('absen', { memberId: me });
     return requestChallenge('register');
   };
 
   const faceSubmit = async (challengeId: string, frames: string[]): Promise<{ ok: boolean; error?: string }> => {
-    if (cam?.mode === 'login') {
+    if (cam?.mode === 'identify') {
+      const r = await loginIdentify(challengeId, frames);
+      if (!r.ok) return r;
+      setCam(null);
+      enterAs(r.data.memberId, r.data.nama);
+      void getGeo().then(setGeo);
+      return { ok: true };
+    }
+    if (cam?.mode === 'enroll') {
       if (!pendingLogin) return { ok: false, error: 'Sesi login hilang — ulangi dari awal.' };
-      const r = await loginFace(pendingLogin.preToken, challengeId, frames);
+      const r = await loginEnrollFace(pendingLogin.preToken, challengeId, frames);
       if (!r.ok) {
         if (/kedaluwarsa/.test(r.error)) {
           setPendingLogin(null);
@@ -546,7 +567,7 @@ export function useAppStore() {
       setPendingLogin(null);
       setCam(null);
       enterAs(r.data.memberId, r.data.nama);
-      if (r.data.enrolled) setToast({ msg: 'Wajah terdaftar ulang — selamat datang!', kind: 'ok' });
+      setToast({ msg: 'Wajah terdaftar — selamat datang!', kind: 'ok' });
       void getGeo().then(setGeo);
       return { ok: true };
     }
@@ -574,6 +595,7 @@ export function useAppStore() {
     void ensurePush(res.memberId);
     void getGeo().then(setGeo);
     setRegProfile(null);
+    setProfiling(false);
     setCam(null);
     setToast({
       msg: `Pendaftaran berhasil — masuk sebagai ${parsed.data.nama} (${parsed.data.jabatan}${angk ? `, angkatan ${angk}` : ''})`,
@@ -788,7 +810,7 @@ export function useAppStore() {
     doneCount, pending, incoming, outgoing, othersPending, approvedSwaps, swappedDays,
     bellDot, ABBR, weekDates, rangeLabel, putarRotasi, dayDate, mySlots,
     taskTap, onFile, pickPhoto, toggleBd, kirimLapsit, needVerify,
-    logout, onProfileDone, credLogin, faceChallenge, faceSubmit,
+    logout, onProfileDone, credLogin, faceLogin, faceChallenge, faceSubmit,
     pendingLoginName: pendingLogin?.nama ?? null,
     submitSwap, decide, cancelSwap, addTo, removeFrom, jamColon, setJam,
     moveWeekMember, saveWeekDrag, resetWeekDrag, clearWeekOverride,

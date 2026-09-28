@@ -1,7 +1,8 @@
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { RefObject } from 'react';
 import type { AuthType, Member } from '../api';
 import { SecretField } from '../Welcome';
+import { TAP } from './Motion';
 
 export function LogoutSheet({
   member, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, onSaveSecret, onEditKontak,
@@ -54,9 +55,19 @@ export function LogoutSheet({
           onEnter={onSaveSecret} autoComplete="new-password"
         />
         <div className="pinrow">
-          <button onClick={onSaveSecret}>Simpan {secretType === 'pin' ? 'PIN' : 'password'}</button>
-          <button onClick={onEditKontak}>Ubah NBP / WA / alias</button>
-          {secretMsg && <span className="pinmsg">{secretMsg}</span>}
+          <motion.button onClick={onSaveSecret} {...TAP}>Simpan {secretType === 'pin' ? 'PIN' : 'password'}</motion.button>
+          <motion.button onClick={onEditKontak} {...TAP}>Ubah NBP / WA / alias</motion.button>
+          <AnimatePresence mode="wait">
+            {secretMsg && (
+              <motion.span
+                key={secretMsg} className="pinmsg"
+                initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {secretMsg}
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
         <button className="danger" onClick={onLogout}>Logout</button>
         <button className="ghostbtn" onClick={onClose}>Batal</button>

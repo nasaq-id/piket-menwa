@@ -335,7 +335,7 @@ export const clearAttest = () => {
 // ---- Verifikasi wajah di server (challenge-response) ----
 // HP hanya memotret; server (CompreFace + anti-spoofing) yang menilai.
 export type FaceAction = 'kiri' | 'kanan';
-export type FacePurpose = 'register' | 'login' | 'absen';
+export type FacePurpose = 'register' | 'login' | 'identify' | 'absen';
 export async function requestChallenge(
   purpose: FacePurpose, extra: { preToken?: string; memberId?: string } = {},
 ): Promise<{ ok: true; challengeId: string; action: FaceAction } | { ok: false; error: string }> {
@@ -427,7 +427,10 @@ export async function setProfilePhoto(memberId: string, dataUrl: string): Promis
   }
 }
 
-// ---- login 2 langkah: NBP/WA + PIN/password → verifikasi wajah akun itu ----
+// ---- Login: 2 jalur terpisah ----
+// (1) manual: NBP / No. WA / alias + PIN/password → langsung masuk
+//     (kecuali akun belum punya template wajah → wajib scan wajah dulu).
+// (2) wajah saja: scan → server cari pemiliknya di semua anggota.
 async function postResult<T>(url: string, body: unknown, fallback: string): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   try {
     const r = await fetch(url, {
@@ -442,18 +445,26 @@ async function postResult<T>(url: string, body: unknown, fallback: string): Prom
   }
 }
 
-export async function loginCredential(ident: string, secret: string) {
-  return postResult<{ memberId: string; nama: string; preToken: string; needEnroll: boolean }>(
-    '/api/login/credential', { ident, secret }, 'gagal masuk',
-  );
-}
-
-export async function loginFace(preToken: string, challengeId: string, frames: string[]) {
-  const r = await postResult<{ memberId: string; nama: string; attest: string; tanggal: string; enrolled: boolean }>(
-    '/api/login/face', { preToken, challengeId, frames }, 'verifikasi wajah gagal',
-  );
+type LoginOk = { memberId: string; nama: string; attest: string; tanggal: string };
+const keepAttest = <T extends { ok: true; data: LoginOk } | { ok: false; error: string }>(r: T): T => {
   if (r.ok) saveAttest(r.data.memberId, r.data.tanggal, r.data.attest);
   return r;
+};
+
+export async function loginCredential(ident: string, secret: string) {
+  const r = await postResult<
+    ({ needEnroll: false } & LoginOk) | { needEnroll: true; memberId: string; nama: string; preToken: string }
+  >('/api/login/credential', { ident, secret }, 'gagal masuk');
+  if (r.ok && !r.data.needEnroll) saveAttest(r.data.memberId, r.data.tanggal, r.data.attest);
+  return r;
+}
+
+export async function loginEnrollFace(preToken: string, challengeId: string, frames: string[]) {
+  return keepAttest(await postResult<LoginOk>('/api/login/enroll-face', { preToken, challengeId, frames }, 'daftar wajah gagal'));
+}
+
+export async function loginIdentify(challengeId: string, frames: string[]) {
+  return keepAttest(await postResult<LoginOk>('/api/login/identify', { challengeId, frames }, 'wajah tidak dikenali'));
 }
 
 // Ganti PIN/password & kontak: server minta token atestasi wajah hari ini.

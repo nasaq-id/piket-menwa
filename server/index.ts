@@ -654,7 +654,7 @@ app.post('/api/face/challenge', rateLimit(30, 60_000), (req, res) => {
   const { purpose, preToken, memberId, attest } = (req.body ?? {}) as {
     purpose: Purpose; preToken?: string; memberId?: string; attest?: string;
   };
-  if (purpose === 'register') return void res.json(issueChallenge('register', null));
+  if (purpose === 'register' || purpose === 'identify') return void res.json(issueChallenge(purpose, null));
   if (purpose === 'login') {
     const id = checkPrelogin(preToken);
     if (!id) return void res.status(401).json({ error: 'Sesi login kedaluwarsa — ulangi dari awal.' });
@@ -781,15 +781,19 @@ app.post('/api/login/credential', rateLimit(10, 60_000), (req, res) => {
   if (!m || typeof secret !== 'string' || !checkSecret(m, secret)) {
     return void res.status(401).json({ error: 'NBP/No. WA/alias atau PIN/password salah' });
   }
-  // Belum punya template wajah (di-reset admin / ganti model) → langkah wajah
-  // berikutnya sekaligus mendaftarkan ulang wajah.
-  res.json({ ok: true, memberId: m.id, nama: m.nama, preToken: issuePrelogin(m.id), needEnroll: !loadTemplate(m.id) });
+  // Belum punya template wajah (di-reset admin / ganti model) → wajib daftar
+  // ulang wajah dulu (tanpa template tidak bisa absen).
+  if (!loadTemplate(m.id)) return void res.json({ ok: true, memberId: m.id, nama: m.nama, needEnroll: true, preToken: issuePrelogin(m.id) });
+  const tanggal = todayLocal();
+  res.json({ ok: true, memberId: m.id, nama: m.nama, needEnroll: false, attest: issueAttest(m.id, tanggal), tanggal });
 });
 
-app.post('/api/login/face', rateLimit(20, 60_000), async (req, res) => {
+// Daftar ulang wajah setelah login manual (akun belum punya template).
+app.post('/api/login/enroll-face', rateLimit(20, 60_000), async (req, res) => {
   const { preToken } = (req.body ?? {}) as { preToken: string };
   const memberId = checkPrelogin(preToken);
   if (!memberId) return void res.status(401).json({ error: 'Sesi login kedaluwarsa — ulangi dari awal.' });
+  if (loadTemplate(memberId)) return void res.status(409).json({ error: 'Wajah akun ini sudah terdaftar — silakan login.' });
   let face;
   try {
     face = await verifyFace(req.body ?? {}, 'login', memberId);
@@ -798,25 +802,45 @@ app.post('/api/login/face', rateLimit(20, 60_000), async (req, res) => {
   }
   if (!face.ok) return void res.status(face.status).json({ error: face.error });
   const { front, turn, scores } = face.out;
-  const tpl = loadTemplate(memberId);
-  if (tpl) {
-    // Verifikasi 1:1 — cuma dibandingkan ke wajah milik akun yang login.
-    const sim = bestMatch(front, tpl);
-    logCheck({ purpose: 'login', memberId, ok: sim >= FACE_CFG.matchMin, reason: sim >= FACE_CFG.matchMin ? null : 'no_match', scores, similarity: sim });
-    if (sim < FACE_CFG.matchMin) return void res.status(401).json({ error: 'Wajah tidak cocok dengan akun ini — coba lagi.' });
-  } else {
-    // Daftar ulang wajah (kredensial sudah terbukti di langkah 1).
-    const owner = faceOwner(front, memberId);
-    if (owner && owner.sim >= FACE_CFG.matchMin) {
-      logCheck({ purpose: 'login', memberId, ok: false, reason: 'duplicate', scores, similarity: owner.sim });
-      return void res.status(409).json({ error: 'Wajah ini sudah terdaftar di akun lain — hubungi admin.' });
-    }
-    saveTemplate(memberId, [front, turn]);
-    logCheck({ purpose: 'login', memberId, ok: true, reason: 'enrolled', scores });
+  const owner = faceOwner(front, memberId);
+  if (owner && owner.sim >= FACE_CFG.matchMin) {
+    logCheck({ purpose: 'login', memberId, ok: false, reason: 'duplicate', scores, similarity: owner.sim });
+    return void res.status(409).json({ error: 'Wajah ini sudah terdaftar di akun lain — hubungi admin.' });
   }
+  saveTemplate(memberId, [front, turn]);
+  logCheck({ purpose: 'login', memberId, ok: true, reason: 'enrolled', scores });
   const m = db.select().from(members).where(eq(members.id, memberId)).all()[0];
   const tanggal = todayLocal();
-  res.json({ ok: true, memberId, nama: m?.nama ?? memberId, attest: issueAttest(memberId, tanggal), tanggal, enrolled: !tpl });
+  res.json({ ok: true, memberId, nama: m?.nama ?? memberId, attest: issueAttest(memberId, tanggal), tanggal });
+});
+
+// Login pakai wajah saja: cari pemilik wajah di SEMUA anggota (1:N).
+// Kalau ada >1 anggota yang sama-sama lolos batas → tolak, jangan menebak.
+app.post('/api/login/identify', rateLimit(20, 60_000), async (req, res) => {
+  let face;
+  try {
+    face = await verifyFace(req.body ?? {}, 'identify', null);
+  } catch (e) {
+    return faceError(res, e);
+  }
+  if (!face.ok) return void res.status(face.status).json({ error: face.error });
+  const { front, scores } = face.out;
+  const hits = allTemplates()
+    .map(({ memberId, tpl }) => ({ memberId, sim: bestMatch(front, tpl) }))
+    .sort((a, b) => b.sim - a.sim);
+  const [top, second] = hits;
+  if (!top || top.sim < FACE_CFG.matchMin) {
+    logCheck({ purpose: 'identify', memberId: null, ok: false, reason: 'unknown', scores, similarity: top?.sim ?? null });
+    return void res.status(404).json({ error: 'Wajah belum terdaftar — daftar dulu, atau login manual.' });
+  }
+  if (second && second.sim >= FACE_CFG.matchMin) {
+    logCheck({ purpose: 'identify', memberId: top.memberId, ok: false, reason: 'ambiguous', scores, similarity: top.sim });
+    return void res.status(409).json({ error: 'Wajahmu mirip dengan anggota lain — pakai login manual.' });
+  }
+  logCheck({ purpose: 'identify', memberId: top.memberId, ok: true, scores, similarity: top.sim });
+  const m = db.select().from(members).where(eq(members.id, top.memberId)).all()[0];
+  const tanggal = todayLocal();
+  res.json({ ok: true, memberId: top.memberId, nama: m?.nama ?? top.memberId, attest: issueAttest(top.memberId, tanggal), tanggal });
 });
 
 // Ganti PIN/password sendiri — wajib atestasi wajah hari ini.

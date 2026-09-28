@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Award, Briefcase, ClipboardList, FileText, Flag, KeyRound, Medal, PenLine, ScanFace, Shield, Sprout, Users } from 'lucide-react';
 import { z } from 'zod';
 import { checkKontak, type AuthType } from './api';
+import { ShakeErr, TAP } from './components/Motion';
 
 export const JABATAN_LIST = [
   'Danki',
@@ -108,13 +109,15 @@ export function SecretField({ label, authType, onAuthType, value, onChange, onEn
       <span>{label}</span>
       <div className="segrow">
         {(['pin', 'password'] as const).map((t) => (
-          <button
-            key={t} type="button"
+          <motion.button
+            key={t} type="button" {...TAP}
             className={`jabcard ${authType === t ? 'sel' : ''}`}
+            animate={{ scale: authType === t ? 1 : 0.97, opacity: authType === t ? 1 : 0.75 }}
+            transition={{ duration: 0.18 }}
             onClick={() => { if (t !== authType) { onAuthType(t); onChange(''); } }}
           >
             <KeyRound size={16} /> {t === 'pin' ? 'PIN (angka)' : 'Password'}
-          </button>
+          </motion.button>
         ))}
       </div>
       <input
@@ -130,11 +133,12 @@ export function SecretField({ label, authType, onAuthType, value, onChange, onEn
   );
 }
 
-// Login langkah 1: NBP / No. WA + PIN / password. Langkah 2 (wajah) dibuka
-// oleh store setelah server menerima kredensial.
-export function WelcomePage({ onLogin, onRegister }: {
+// Dua jalur login lewat logo (pilihan tidak ditampilkan langsung):
+//   ketuk 1× → form manual (NBP / No. WA / alias + PIN/password)
+//   ketuk 2× → kamera langsung scan wajah (server mengenali pemiliknya).
+export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   onLogin: (ident: string, secret: string) => Promise<{ ok: boolean; error?: string }>;
-  onRegister: () => void;
+  onFaceLogin: () => void; onRegister: () => void;
 }) {
   // Slot logo: taruh file di public/brand/logo-menwa.png → otomatis kepakai.
   // Belum ada file = fallback ikon Shield.
@@ -144,6 +148,25 @@ export function WelcomePage({ onLogin, onRegister }: {
   const [authType, setAuthType] = useState<AuthType>(loadAuthPref);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  // Bedakan ketuk 1× vs 2×: tunggu sebentar setelah ketukan pertama.
+  const TAP_WINDOW = 300;
+  const tapTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(tapTimer.current), []);
+  const onLogoTap = () => {
+    if (tapTimer.current !== undefined) {
+      window.clearTimeout(tapTimer.current);
+      tapTimer.current = undefined;
+      try { navigator.vibrate?.([15, 40, 15]); } catch { /* opsional */ }
+      onFaceLogin();
+      return;
+    }
+    tapTimer.current = window.setTimeout(() => {
+      tapTimer.current = undefined;
+      try { navigator.vibrate?.(15); } catch { /* opsional */ }
+      setShowForm((v) => !v);
+    }, TAP_WINDOW);
+  };
   const pickAuth = (t: AuthType) => {
     setAuthType(t);
     try { localStorage.setItem(AUTH_PREF, t); } catch { /* abaikan */ }
@@ -170,40 +193,53 @@ export function WelcomePage({ onLogin, onRegister }: {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.35 }}
     >
-      <motion.div
-        className="wlogo"
+      <motion.button
+        type="button"
+        className="wlogo wlogotap"
+        aria-label="Ketuk 1 kali untuk login manual, 2 kali untuk login dengan wajah"
+        onClick={onLogoTap}
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
+        whileTap={{ scale: 0.92 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
       >
         {logoOk
           ? <img src="/brand/logo-menwa.png" alt="Logo Menwa" onError={() => setLogoOk(false)} />
           : <Shield size={52} />}
-      </motion.div>
+      </motion.button>
+      <motion.p className="whint dim tapHint" {...fade(0.2)}>ketuk logo 1× login manual • 2× login dengan wajah</motion.p>
       <motion.h1 {...fade(0.08)}>JURNAL PIKET MENWA USB YPKP TAHUN 2026</motion.h1>
       <motion.p className="wsub" {...fade(0.16)}>Absensi, Jadwal Piket, Bukti Tugas.</motion.p>
-      <motion.form
-        className="loginform" {...fade(0.24)}
-        onSubmit={(e) => { e.preventDefault(); void submit(); }}
-      >
-        <label className="wfield">
-          <span>NBP / No. WhatsApp / Alias</span>
-          <input
-            autoComplete="username" inputMode="text" autoCapitalize="none"
-            placeholder="1494.08.148031, 0812…, atau alias" value={ident}
-            onChange={(e) => { setIdent(e.target.value.slice(0, 20)); setErr(null); }}
+      <AnimatePresence initial={false}>
+        {showForm && (
+        <motion.form
+          className="loginform"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          onSubmit={(e) => { e.preventDefault(); void submit(); }}
+        >
+          <label className="wfield">
+            <span>NBP / No. WhatsApp / Alias</span>
+            <input
+              autoFocus autoComplete="username" inputMode="text" autoCapitalize="none"
+              placeholder="1494.08.148031, 0812…, atau alias" value={ident}
+              onChange={(e) => { setIdent(e.target.value.slice(0, 20)); setErr(null); }}
+            />
+          </label>
+          <SecretField
+            label="PIN / Password" authType={authType} onAuthType={pickAuth}
+            value={secret} onChange={(v) => { setSecret(v); setErr(null); }}
+            autoComplete="current-password"
           />
-        </label>
-        <SecretField
-          label="PIN / Password" authType={authType} onAuthType={pickAuth}
-          value={secret} onChange={(v) => { setSecret(v); setErr(null); }}
-          autoComplete="current-password"
-        />
-        {err && <em className="werr">{err}</em>}
-        <button className="wbtn" type="submit" disabled={busy}>
-          <ScanFace size={18} /> {busy ? 'Memeriksa…' : 'Lanjut verifikasi wajah'}
-        </button>
-      </motion.form>
+          <ShakeErr msg={err} />
+          <motion.button className="wbtn" type="submit" disabled={busy} {...TAP}>
+            <KeyRound size={18} /> {busy ? 'Memeriksa…' : 'Masuk'}
+          </motion.button>
+        </motion.form>
+        )}
+      </AnimatePresence>
       <motion.p className="whint" {...fade(0.32)}>
         Belum punya akun? <button className="wlink" onClick={onRegister}>Daftar</button>
       </motion.p>
@@ -270,11 +306,20 @@ export function NbpField({ value, onChange, onEnter }: { value: string; onChange
         onChange={(e) => onChange(formatNbp(e.target.value))}
         onKeyDown={(e) => { if (e.key === 'Enter') onEnter?.(); }}
       />
-      <small className="hint">
-        {angkatan
-          ? `Angkatan ${angkatan} (dari 2 digit pertama NBP).`
-          : 'Angkatan otomatis dari NBP. Belum punya NBP? Kosongkan — bisa diisi nanti.'}
-      </small>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.small
+          key={angkatan ?? 'kosong'}
+          className={`hint ${angkatan ? 'ok' : ''}`}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+          transition={{ duration: 0.18 }}
+        >
+          {angkatan
+            ? `Angkatan ${angkatan} (dari 2 digit pertama NBP).`
+            : 'Angkatan otomatis dari NBP. Belum punya NBP? Kosongkan — bisa diisi nanti.'}
+        </motion.small>
+      </AnimatePresence>
     </label>
   );
 }
@@ -294,9 +339,12 @@ export function WaField({ value, onChange, onEnter }: { value: string; onChange:
 }
 
 // Urutan langkah; index dipakai di go() untuk validasi + cek server.
-const STEP_LABELS = ['Nama Lengkap', 'Alias', 'NBP', 'Jabatan', 'No. WhatsApp', 'Persetujuan Data Wajah', 'PIN / Password'];
-const S = { nama: 0, alias: 1, nbp: 2, jabatan: 3, wa: 4, consent: 5, secret: 6 } as const;
-const LAST = STEP_LABELS.length - 1;
+// Urusan wajah dikumpulkan di akhir: PIN/password → persetujuan → scan wajah.
+// Langkah terakhir (Scan Wajah) = kamera; wizard tetap terpasang di bawahnya
+// supaya isian tidak hilang kalau scan ditutup/gagal.
+const STEP_LABELS = ['Nama Lengkap', 'Alias', 'NBP', 'Jabatan', 'No. WhatsApp', 'PIN / Password', 'Persetujuan Data Wajah', 'Scan Wajah'];
+const S = { nama: 0, alias: 1, nbp: 2, jabatan: 3, wa: 4, secret: 5, consent: 6 } as const;
+const LAST = S.consent; // langkah form terakhir; sesudahnya kamera
 const stepSchemas: Partial<Record<number, z.ZodType>> = {
   [S.nama]: profileSchema.shape.nama,
   [S.alias]: aliasSchema,
@@ -307,9 +355,10 @@ const stepSchemas: Partial<Record<number, z.ZodType>> = {
 const stepCheck: Partial<Record<number, 'alias' | 'nbp' | 'wa'>> = { [S.alias]: 'alias', [S.nbp]: 'nbp', [S.wa]: 'wa' };
 const CHECK_LABEL = { alias: 'Alias', nbp: 'NBP', wa: 'No. WhatsApp' } as const;
 
-export function ProfilePage({ onDone, onCancel, names, existing }: {
+export function ProfilePage({ onDone, onCancel, names, existing, scanning = false }: {
   onDone: (p: Profile) => void; onCancel: () => void; names: string[];
   existing: { nama: string; angkatan: string | null }[];
+  scanning?: boolean; // kamera scan wajah (langkah terakhir) sedang terbuka
 }) {
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
@@ -363,6 +412,7 @@ export function ProfilePage({ onDone, onCancel, names, existing }: {
   }, [nama, namesKey]);
 
   const jab = jabPreset === '__custom' ? jabCustom : jabPreset;
+  const shown = scanning ? STEP_LABELS.length - 1 : step;
   const vals: Partial<Record<number, string>> = { [S.nama]: nama, [S.alias]: alias, [S.nbp]: nbp, [S.wa]: wa };
   const angkatan = angkatanFromNbp(nbp);
 
@@ -380,9 +430,10 @@ export function ProfilePage({ onDone, onCancel, names, existing }: {
         setErr('Pilih jabatan atau isi manual.');
         return;
       }
-      if (step === S.consent && !consent) {
-        setErr('Persetujuan wajib — wajah dipakai untuk login & absensi piket.');
-        return;
+      if (step === S.secret) {
+        const e = secretIssue(authType, secret, angkatan ?? '')
+          ?? (secret !== secret2 ? `${authType === 'pin' ? 'PIN' : 'Password'} konfirmasi tidak sama.` : null);
+        if (e) return setErr(e);
       }
       const schema = stepSchemas[step];
       if (schema) {
@@ -414,6 +465,10 @@ export function ProfilePage({ onDone, onCancel, names, existing }: {
   };
 
   const submit = () => {
+    if (!consent) {
+      setErr('Persetujuan wajib — wajah dipakai untuk login & absensi piket.');
+      return;
+    }
     if (!jab) {
       setErr('Pilih jabatan atau isi manual.');
       return;
@@ -443,13 +498,13 @@ export function ProfilePage({ onDone, onCancel, names, existing }: {
           <motion.i
             key={i}
             initial={false}
-            animate={{ opacity: i <= step ? 1 : 0.25 }}
+            animate={{ opacity: i <= shown ? 1 : 0.25 }}
             transition={{ duration: 0.25 }}
-            className={i <= step ? 'on' : ''}
+            className={i <= shown ? 'on' : ''}
           />
         ))}
       </div>
-      <p className="pstep-label">Langkah {step + 1} dari {STEP_LABELS.length} — {STEP_LABELS[step]}</p>
+      <p className="pstep-label">Langkah {shown + 1} dari {STEP_LABELS.length} — {STEP_LABELS[shown]}</p>
       <AnimatePresence mode="wait" custom={dir}>
         <motion.div
           key={step}
@@ -544,7 +599,7 @@ export function ProfilePage({ onDone, onCancel, names, existing }: {
                   inputMode={authType === 'pin' ? 'numeric' : 'text'}
                   maxLength={authType === 'pin' ? 12 : 64} value={secret2}
                   onChange={(e) => setSecret2(authType === 'pin' ? e.target.value.replace(/\D/g, '').slice(0, 12) : e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void go(1); }}
                 />
                 <small className="hint">
                   {authType === 'pin'

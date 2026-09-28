@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, RotateCw, ScanFace } from 'lucide-react';
 import { tingStage, warmAudio } from '../face';
 import type { FaceAction } from '../api';
+import { TAP } from './Motion';
 
 // Scan wajah challenge-response: HP cuma memotret, SERVER yang menilai
 // (liveness, arah menoleh, kecocokan). Urutan: tatap depan → server kasih
@@ -12,8 +13,10 @@ type Phase = 'starting' | 'ready' | 'front' | 'turn' | 'sending' | 'done' | 'err
 // Jeda pengambilan frame setelah instruksi menoleh muncul (ms).
 const TURN_SHOTS_MS = [900, 1300, 1700, 2100];
 
-export function FaceCam({ title, getChallenge, submit, onClose }: {
+export function FaceCam({ title, autoStart = false, getChallenge, submit, onClose }: {
   title: string;
+  // true = langsung scan begitu kamera siap (tanpa tombol Mulai).
+  autoStart?: boolean;
   getChallenge: () => Promise<{ ok: true; challengeId: string; action: FaceAction } | { ok: false; error: string }>;
   submit: (challengeId: string, frames: string[]) => Promise<{ ok: boolean; error?: string }>;
   onClose: () => void;
@@ -41,7 +44,7 @@ export function FaceCam({ title, getChallenge, submit, onClose }: {
         v.srcObject = stream;
         await v.play();
         setPhase('ready');
-        setMsg('Posisikan wajah di dalam oval, lalu tap Mulai.');
+        setMsg(autoStart ? 'Posisikan wajah di dalam oval…' : 'Posisikan wajah di dalam oval, lalu tap Mulai.');
       } catch (e) {
         if (!alive.current) return;
         const name = (e as Error).name;
@@ -57,6 +60,9 @@ export function FaceCam({ title, getChallenge, submit, onClose }: {
       alive.current = false;
       stream?.getTracks().forEach((t) => t.stop());
     };
+    // Kamera dinyalakan sekali per pemasangan; autoStart tetap selama FaceCam terbuka
+    // (App memasang ulang komponen tiap mode berganti lewat key).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Frame dikirim TANPA dicermin (pratinjau saja yang dicermin lewat CSS).
@@ -122,7 +128,24 @@ export function FaceCam({ title, getChallenge, submit, onClose }: {
     }
   };
 
+  // Mulai otomatis sekali saat kamera siap; beri jeda singkat untuk memposisikan wajah.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (!autoStart || phase !== 'ready' || autoRan.current) return;
+    autoRan.current = true;
+    const t = setTimeout(() => void run(), 700);
+    return () => clearTimeout(t);
+    // run() sengaja tidak di deps: cukup dipicu sekali saat phase jadi 'ready'.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, phase]);
+
   const busy = phase === 'front' || phase === 'turn' || phase === 'sending';
+  const pop = {
+    initial: { opacity: 0, scale: 0.9 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.9 },
+    transition: { duration: 0.18 },
+  } as const;
   const ovalClass = phase === 'done' ? 'ovok' : 'ovrun';
   return (
     <div className="camwrap">
@@ -139,7 +162,16 @@ export function FaceCam({ title, getChallenge, submit, onClose }: {
             <video ref={videoRef} playsInline muted autoPlay />
             <svg className="ovalsvg" viewBox="0 0 100 140" preserveAspectRatio="none">
               <ellipse cx="50" cy="60" rx="30" ry="42" className="ovbg" />
-              {(busy || phase === 'done') && <ellipse cx="50" cy="60" rx="30" ry="42" className={ovalClass} />}
+              {(busy || phase === 'done') && (
+                <motion.ellipse
+                  cx="50" cy="60" rx="30" ry="42" className={ovalClass}
+                  pathLength={100} strokeDasharray="100"
+                  // Oval "menggambar diri" selama scan; penuh + menyala saat berhasil.
+                  initial={{ strokeDashoffset: 100 }}
+                  animate={{ strokeDashoffset: phase === 'front' ? 70 : phase === 'turn' ? 35 : 0 }}
+                  transition={{ duration: phase === 'turn' ? 2 : 0.4, ease: 'easeOut' }}
+                />
+              )}
             </svg>
           </div>
           {/* Di luar .camview (yang dicermin) supaya panah tidak ikut terbalik:
@@ -159,16 +191,46 @@ export function FaceCam({ title, getChallenge, submit, onClose }: {
             )}
           </AnimatePresence>
         </div>
-        <p className={`hint ${phase === 'error' || phase === 'failed' ? 'werr' : ''} ${phase === 'turn' ? 'turnmsg' : ''}`}>{msg}</p>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.p
+            key={msg}
+            className={`hint ${phase === 'error' || phase === 'failed' ? 'werr' : ''} ${phase === 'turn' ? 'turnmsg' : ''}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={phase === 'error' ? { opacity: 1, y: 0, x: [0, -7, 7, -4, 4, 0] } : { opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: phase === 'error' ? 0.35 : 0.18 }}
+          >
+            {msg}
+          </motion.p>
+        </AnimatePresence>
         <div className="row">
-          {phase === 'ready' && (
-            <button className="primary cta" onClick={() => void run()}><ScanFace size={20} /> Mulai</button>
-          )}
-          {phase === 'error' && (
-            <button className="primary" onClick={() => void run()}><RotateCw size={15} /> Coba lagi</button>
-          )}
-          {phase === 'done' && <button className="primary" disabled><Check size={15} /> Berhasil</button>}
-          {!busy && phase !== 'done' && <button onClick={onClose}>Tutup</button>}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {phase === 'ready' && (
+              <motion.button key="mulai" className="primary cta" onClick={() => void run()} {...TAP} {...pop}>
+                <ScanFace size={20} /> Mulai
+              </motion.button>
+            )}
+            {phase === 'error' && (
+              <motion.button key="ulang" className="primary" onClick={() => void run()} {...TAP} {...pop}>
+                <RotateCw size={15} /> Coba lagi
+              </motion.button>
+            )}
+            {phase === 'done' && (
+              <motion.button key="ok" className="primary" disabled {...pop}>
+                <motion.span
+                  initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+                  style={{ display: 'inline-flex' }}
+                >
+                  <Check size={15} />
+                </motion.span>
+                Berhasil
+              </motion.button>
+            )}
+            {!busy && phase !== 'done' && (
+              <motion.button key="tutup" onClick={onClose} {...TAP} {...pop}>Tutup</motion.button>
+            )}
+          </AnimatePresence>
         </div>
         <p className="hint dim">Foto wajah hanya diproses sesaat di server kami lalu dibuang — tidak disimpan.</p>
       </motion.div>

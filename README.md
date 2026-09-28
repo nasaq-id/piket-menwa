@@ -9,10 +9,10 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 ## ✨ Fitur
 
 ### 🔐 Auth & Identitas
-- **Login 2 langkah** — (1) NBP / No. WhatsApp / alias + PIN atau password, lalu (2) verifikasi wajah 1:1 terhadap akun itu.
+- **Login 2 jalur (pilih salah satu)** — (a) manual: NBP / No. WhatsApp / alias + PIN atau password, atau (b) **wajah saja**: scan → server mengenali pemiliknya di antara semua anggota (ditolak kalau ada >1 anggota yang sama-sama mirip). Absen tetap wajib scan wajah.
 - **Registrasi mandiri** — wizard: Nama → Alias → NBP (angkatan otomatis dari 2 digit pertama) → Jabatan → No. WA → persetujuan data wajah (UU PDP) → PIN/password, lalu scan wajah. Tolak duplikat wajah, NBP, WA, alias.
 - **Scan wajah challenge-response** — tatap depan, lalu server memberi arah menoleh **acak** (kiri/kanan, berlaku 30 detik, sekali pakai). Foto/layar tidak bisa menoleh sesuai perintah; rekaman video tidak bisa menebak arahnya.
-- **Daftar ulang wajah** — kalau template wajah di-reset/ganti model, login berikutnya (setelah kredensial benar) sekaligus mendaftarkan ulang wajah.
+- **Daftar ulang wajah** — kalau template wajah di-reset/ganti model, login manual berikutnya langsung meminta scan wajah sekali (tanpa template tidak bisa absen).
 - **Sesi harian** — login berlaku 1 hari.
 
 ### 🧑‍💼 Piket Harian
