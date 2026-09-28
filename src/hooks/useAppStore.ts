@@ -18,14 +18,6 @@ export type Tab = 'hari' | 'minggu' | 'tukar';
 
 export interface PreviewState { file: string; judul: string; by: string; tanggal: string }
 
-// Flag "sudah verifikasi wajah hari ini" harus terikat PER-ANGGOTA, bukan
-// cuma per-tanggal — device sering gantian dipakai beberapa anggota piket
-// (satu HP/tablet bersama). Kalau cuma per-tanggal, anggota kedua yang
-// login di device yang sama otomatis kebaca "unlocked" dari sesi anggota
-// pertama walau dia sendiri belum verifikasi (bug tombol absen kedip lalu
-// hilang: sempat unlocked=false sesaat, lalu ke-overwrite true oleh flag
-// stale milik orang lain begitu `me` di-set).
-const unlockKey = (memberId: string) => `piket-unlock-date:${memberId}`;
 
 export function useAppStore() {
   const [tab, setTab] = useState<Tab>('hari');
@@ -48,7 +40,8 @@ export function useAppStore() {
   const [nilaiHariIni, setNilaiHariIni] = useState<number | null>(null);
   const [faces, setFaces] = useState<FaceSummary[]>([]);
   const [att, setAtt] = useState<AttRow[]>([]);
-  const [unlocked, setUnlocked] = useState(false); // wajah terverifikasi sesi ini
+  // Posisi GPS yang diambil saat menekan Absen (dipakai challenge + kirim absen).
+  const absenGeoRef = useRef<Geo | null>(null);
   // Kamera scan wajah: daftar, login pakai wajah (identify), daftar ulang wajah
   // setelah login manual (enroll), atau absen piket.
   const [cam, setCam] = useState<null | { mode: 'absen' | 'identify' | 'enroll' | 'register' }>(null);
@@ -125,12 +118,10 @@ export function useAppStore() {
     setCam({ mode: 'identify' });
   };
 
-  // Login selesai (manual atau wajah). Checklist TIDAK otomatis terbuka —
-  // itu hanya lewat absen (verifikasi wajah baru di mako), kecuali sesi ini
-  // sudah absen sebelumnya.
+  // Login selesai (manual atau wajah). Checklist TIDAK ikut terbuka — itu
+  // hanya lewat absen (scan wajah di mako), lihat `unlocked`.
   const enterAs = (memberId: string, namaV: string) => {
     setMe(memberId);
-    setUnlocked(sessionStorage.getItem(unlockKey(memberId)) === dateStr(0));
     ting(990, 0.18);
     setToast({ msg: `Login berhasil — selamat datang, ${namaV}`, kind: 'ok' });
     void ensurePush(memberId);
@@ -241,9 +232,12 @@ export function useAppStore() {
       setAtt([]);
       setLapsit([]);
     }
-    setUnlocked(me !== '' && sessionStorage.getItem(unlockKey(me)) === dateStr(0));
   };
   useEffect(() => { void refresh(); }, []);
+
+  // Checklist/bukti/lapsit terbuka = sudah absen hari ini (sumber: data server,
+  // bukan sesi browser → aman ganti HP / refresh; server juga menegakkan ini).
+  const unlocked = !!me && att.some((a) => a.memberId === me && a.tanggal === dateStr(0));
 
   const members: Member[] = useMemo(
     () => state?.members ?? [], [state],
@@ -512,21 +506,31 @@ export function useAppStore() {
     if (me) setNilaiHariIni(await loadNilaiToday(dateStr(0), me));
   };
 
-  const needVerify = () => {
-    if (!state?.fromApi) return alert('Butuh online untuk verifikasi wajah.');
-    if (!meMember) return;
+  // Absen: ambil lokasi dulu (geofence mako), baru buka kamera. Jadwal, jam,
+  // & lokasi dicek server saat minta challenge → gagal cepat sebelum scan.
+  const [absenBusy, setAbsenBusy] = useState(false);
+  const needVerify = async () => {
+    if (!state?.fromApi) return alert('Butuh online untuk absen.');
+    if (!meMember || absenBusy) return;
     if (!crew.includes(me)) {
-      return alert('Kamu tidak ada jadwal hari ini — minta Admin susun roster dulu (tab Mingguan, mode Admin).');
+      return alert('Kamu tidak ada jadwal hari ini — minta Admin susun petugas piket dulu (tab Mingguan, mode Admin).');
     }
+    setAbsenBusy(true);
+    const g = await getGeo(10_000);
+    setAbsenBusy(false);
+    if (!g) {
+      setToast({ msg: 'Lokasi tidak terbaca — izinkan akses lokasi (GPS) di browser, lalu coba lagi.', kind: 'error' });
+      return;
+    }
+    absenGeoRef.current = g;
+    setGeo(g);
     setCam({ mode: 'absen' });
   };
 
   const logout = () => {
     void dropPush();
     clearAttest();
-    try { if (me) sessionStorage.removeItem(unlockKey(me)); } catch { /* abaikan */ }
     setMe('');
-    setUnlocked(false);
     setShowLogout(false);
   };
 
@@ -540,7 +544,7 @@ export function useAppStore() {
   const faceChallenge = () => {
     if (cam?.mode === 'enroll') return requestChallenge('login', { preToken: pendingLogin?.preToken });
     if (cam?.mode === 'identify') return requestChallenge('identify');
-    if (cam?.mode === 'absen') return requestChallenge('absen', { memberId: me });
+    if (cam?.mode === 'absen') return requestChallenge('absen', { memberId: me, geo: absenGeoRef.current });
     return requestChallenge('register');
   };
 
@@ -572,16 +576,18 @@ export function useAppStore() {
       return { ok: true };
     }
     if (cam?.mode === 'absen') {
-      const r = await markAttendance(dateStr(0), me, challengeId, frames);
+      const r = await markAttendance(dateStr(0), me, challengeId, frames, absenGeoRef.current);
       if (!r.ok) return r;
       const a = await loadAttendance(dateStr(0), dateStr(0));
       if (a) setAtt(a);
-      setUnlocked(true);
-      try { sessionStorage.setItem(unlockKey(me), dateStr(0)); } catch { /* abaikan */ }
       setCam(null);
-      setToast({ msg: 'Absen berhasil — checklist & bukti terbuka', kind: 'ok' });
+      setToast({
+        msg: r.status === 'terlambat'
+          ? `Absen tercatat ${r.jam ?? ''} — TERLAMBAT. Checklist & bukti terbuka.`
+          : `Absen tercatat ${r.jam ?? ''} — tepat waktu. Checklist & bukti terbuka.`,
+        kind: r.status === 'terlambat' ? 'info' : 'ok',
+      });
       void ensurePush(me);
-      void getGeo().then(setGeo); // siapkan koordinat untuk stempel foto
       return { ok: true };
     }
     // register
@@ -819,7 +825,7 @@ export function useAppStore() {
     target, setTarget, fromDay, setFromDay, toDay, setToDay, alasan, setAlasan,
     weekOff, setWeekOff, weekStat, expanded, setExpanded, pickDay, setPickDay,
     weekLoading, dragSchedule, dragDirty, dragSaving, weekOverridden,
-    me, setMe, faces, att, unlocked, cam, setCam,
+    me, setMe, faces, att, unlocked, absenBusy, cam, setCam,
     toast, setToast, profiling, setProfiling,
     navHidden, showLogout, setShowLogout, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, saveSecret,
     showKontak, setShowKontak, saveKontak,

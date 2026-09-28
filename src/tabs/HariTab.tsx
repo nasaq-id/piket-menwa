@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Camera, Check, ChevronDown, Clock, Lock, LockOpen, PartyPopper } from 'lucide-react';
+import { Camera, Check, ChevronDown, Clock, Lock, MapPin, PartyPopper } from 'lucide-react';
 import { BREAKDOWN } from '../breakdown';
-import { dateStr } from '../piket';
+import { ABSEN_BUKA_MENIT, ABSEN_TELAT_MENIT, dateStr, geserJam } from '../piket';
 import { isOnline } from '../api';
 import type { AppStore } from '../hooks/useAppStore';
+import { TAP } from '../components/Motion';
 
 const fmtTanggal = new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
 const todayLong = () => {
@@ -13,13 +14,15 @@ const todayLong = () => {
 
 export function HariTab({ store }: { store: AppStore }) {
   const {
-    today, crew, att, members, nama, warna, jamHari, mySlots, me, unlocked,
+    today, crew, att, members, nama, warna, jamHari, mySlots, me, unlocked, absenBusy,
     needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef,
     pendingTugas, onFile, bdDone, bdOpen, setBdOpen, bdSecOpen, setBdSecOpen,
     nilaiHariIni, lapsit, lapsitText, setLapsitText, kirimLapsit, lapsitOpen,
     lapsitOpenAt, jamSelesaiHariIni, tmr, crewBesok, state, setPreview,
     buktiOpen, setBuktiOpen, toggleBd,
   } = store;
+  const [jamMulai, jamSelesai] = jamHari.split('–').map((x) => x.trim());
+  const myAtt = att.find((a) => a.memberId === me && a.tanggal === dateStr(0));
   return (
     <>
       <p className="tgl">{todayLong()}</p>
@@ -42,7 +45,9 @@ export function HariTab({ store }: { store: AppStore }) {
                     : <i style={{ background: warna(id) }} />}
                   <span>{nama(id)}</span>
                   {m && isOnline(m) && <i className="onlinedot" title="online" />}
-                  <em className={row ? 'badge-ok' : 'badge-no'}>{row ? `hadir ${row.jam}` : 'belum'}</em>
+                  <em className={row ? (row.status === 'terlambat' ? 'badge-no late' : 'badge-ok') : 'badge-no'}>
+                    {row ? `${row.status === 'terlambat' ? 'terlambat' : 'hadir'} ${row.jam}` : 'belum'}
+                  </em>
                 </div>
               );
             })}
@@ -59,14 +64,37 @@ export function HariTab({ store }: { store: AppStore }) {
       {today !== 'Libur' && (
         <>
           {mySlots.length === 0 && (
-            <p className="hint">Kamu belum masuk roster minggu ini — minta Admin tambahkan via tab Mingguan (mode Admin).</p>
+            <p className="hint">Kamu belum terdaftar sebagai petugas piket minggu ini — minta Admin tambahkan via tab Mingguan (mode Admin).</p>
           )}
-          {crew.includes(me) && !unlocked && (
-            <button className="bigbtn" onClick={needVerify}>
-              {att.some((a) => a.memberId === me) ? <><LockOpen size={15} /> Verifikasi wajah (buka checklist)</> : <><Camera size={15} /> Absen tiba (scan wajah)</>}
-            </button>
-          )}
-          {unlocked && <p className="hint"><Check size={13} /> Wajah terverifikasi — checklist & bukti terbuka sesi ini.</p>}
+          <AnimatePresence mode="wait" initial={false}>
+            {crew.includes(me) && !unlocked && (
+              <motion.div
+                key="absen"
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+              >
+                <motion.button className="bigbtn" onClick={() => void needVerify()} disabled={absenBusy} {...TAP}>
+                  {absenBusy
+                    ? <><MapPin size={15} /> Mengecek lokasi…</>
+                    : <><Camera size={15} /> Absen tiba (scan wajah di mako)</>}
+                </motion.button>
+                {jamMulai && (
+                  <p className="hint">
+                    Absen dibuka {geserJam(jamMulai, -ABSEN_BUKA_MENIT)}–{jamSelesai}. Lewat {geserJam(jamMulai, ABSEN_TELAT_MENIT)} tercatat terlambat. Wajib di area mako (GPS aktif).
+                  </p>
+                )}
+              </motion.div>
+            )}
+            {unlocked && myAtt && (
+              <motion.p
+                key="sudah" className="hint"
+                initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Check size={13} /> Sudah absen {myAtt.jam}{myAtt.status === 'terlambat' ? ' (terlambat)' : ''} — checklist & bukti terbuka.
+              </motion.p>
+            )}
+          </AnimatePresence>
           <div className="bdgroup">
             <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)}>
               <span>Bukti Piket (Wajib)</span>
@@ -82,7 +110,7 @@ export function HariTab({ store }: { store: AppStore }) {
                   transition={{ duration: 0.22, ease: 'easeOut' }}
                   style={{ overflow: 'hidden' }}
                 >
-                  {!unlocked && <p className="hint"><Lock size={12} /> Verifikasi wajah dulu untuk membuka bukti.</p>}
+                  {!unlocked && <p className="hint"><Lock size={12} /> Absen dulu (scan wajah di mako) untuk membuka bukti.</p>}
                   <ul className="tasks">
                     {checks.map((c) => {
                       const ph = ev.find((e) => e.tugas === c.judul);
@@ -116,7 +144,7 @@ export function HariTab({ store }: { store: AppStore }) {
                     ref={photoRef} type="file" accept="image/*" capture="environment" hidden
                     onChange={(e) => { void onFile(pendingTugas ?? '', e.target.files?.[0]); e.target.value = ''; }}
                   />
-                  <p className="hint">1 tugas = 1 foto (siapa pun yang piket boleh moto). Tap kamera untuk lihat/ganti, tap judul untuk centang. {ev.length}/{checks.length} berfoto.</p>
+                  <p className="hint">1 tugas = 1 foto milikmu sendiri, tercentang otomatis saat foto terkirim. Foto yang sudah terkirim tidak bisa diganti. {ev.length}/{checks.length} berfoto.</p>
                 </motion.div>
               )}
             </AnimatePresence>

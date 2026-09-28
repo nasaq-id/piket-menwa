@@ -222,7 +222,7 @@ app.get('/api/state', (_req, res) => {
 // ---- roster (admin ganti jadwal + jam) — template dasar berulang tiap minggu ----
 app.put('/api/roster', requireAdmin, (req, res) => {
   const rows = req.body.roster as { day: string; memberId: string; jamMulai?: string; jamSelesai?: string }[];
-  if (!Array.isArray(rows)) return void res.status(400).json({ error: 'roster harus array' });
+  if (!Array.isArray(rows)) return void res.status(400).json({ error: 'data petugas piket harus array' });
   for (const r of rows) {
     if (!DAYS.includes(r.day as (typeof DAYS)[number])) return void res.status(400).json({ error: `hari invalid: ${r.day}` });
   }
@@ -265,7 +265,7 @@ app.put('/api/roster/week', requireAdmin, (req, res) => {
   const start = String(req.body.start ?? '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return void res.status(400).json({ error: 'start=YYYY-MM-DD (Senin minggu ybs)' });
   const rows = req.body.roster as { day: string; memberId: string; jamMulai?: string; jamSelesai?: string }[];
-  if (!Array.isArray(rows)) return void res.status(400).json({ error: 'roster harus array' });
+  if (!Array.isArray(rows)) return void res.status(400).json({ error: 'data petugas piket harus array' });
   for (const r of rows) {
     if (!DAYS.includes(r.day as (typeof DAYS)[number])) return void res.status(400).json({ error: `hari invalid: ${r.day}` });
   }
@@ -661,10 +661,17 @@ app.post('/api/face/challenge', rateLimit(30, 60_000), (req, res) => {
     return void res.json(issueChallenge('login', id));
   }
   if (purpose === 'absen') {
-    // Absen = verifikasi wajah BARU di mako, terpisah dari login.
-    if (!memberId || !checkAttest(attest, memberId, todayLocal())) {
+    // Absen = verifikasi wajah BARU di mako, terpisah dari login. Jadwal, jam,
+    // & lokasi dicek DULU supaya tidak scan wajah sia-sia.
+    const tanggal = todayLocal();
+    if (!memberId || !checkAttest(attest, memberId, tanggal)) {
       return void res.status(403).json({ error: 'Login dulu hari ini.' });
     }
+    if (hasAttended(tanggal, memberId)) return void res.status(409).json({ error: 'Kamu sudah absen hari ini.' });
+    const win = absenWindow(tanggal, memberId);
+    if (!win.ok) return void res.status(400).json({ error: win.error });
+    const geo = absenGeo((req.body ?? {}).geo);
+    if (!geo.ok) return void res.status(400).json({ error: geo.error });
     return void res.json(issueChallenge('absen', memberId));
   }
   res.status(400).json({ error: 'purpose invalid' });
@@ -918,7 +925,11 @@ app.delete('/api/faces/:memberId', requireAdmin, (req, res) => {
 // ---- absen tiba (terbuka; diklaim setelah verifikasi wajah lolos di HP) ----
 app.get('/api/attendance', (req, res) => {
   const { date, from, to } = req.query as Record<string, string | undefined>;
-  let rows = db.select().from(attendance).all();
+  // Koordinat mentah tidak dikirim — cukup status & jarak ke mako.
+  let rows = db.select({
+    id: attendance.id, tanggal: attendance.tanggal, memberId: attendance.memberId, jam: attendance.jam,
+    createdAt: attendance.createdAt, status: attendance.status, jarakM: attendance.jarakM,
+  }).from(attendance).all();
   if (date) rows = rows.filter((r) => r.tanggal === date);
   if (from && to) rows = rows.filter((r) => r.tanggal >= from && r.tanggal <= to);
   res.json(rows);
@@ -951,29 +962,112 @@ const effectiveRosterDay = (day: string, week: string) => {
     : db.select().from(roster).where(and(isNull(roster.weekStart), eq(roster.day, day))).all();
 };
 
-// Jam selesai piket EFEKTIF utk member+tanggal (dipakai gate kirim lapsit).
-// Ikuti jam yang diatur admin: pakai override minggu itu kalau ada (hasil
-// drag-drop tab Mingguan), fallback ke jadwal template dasar.
-const jamSelesaiAt = (tanggal: string, memberId: string): string | null => {
+// Baris roster EFEKTIF utk member+tanggal (jam mulai/selesai yg diatur admin):
+// override minggu itu kalau ada (drag-drop tab Mingguan), fallback template dasar.
+const rosterRowAt = (tanggal: string, memberId: string) => {
   const dow = new Date(tanggal + 'T00:00').getDay();
   if (dow < 1 || dow > 5) return null;
   const day = DAYS[dow - 1];
   const week = mondayOf(tanggal);
   const overrideRow = db.select().from(roster)
     .where(and(eq(roster.weekStart, week), eq(roster.day, day), eq(roster.memberId, memberId))).all()[0];
-  if (overrideRow) return overrideRow.jamSelesai;
-  const baseRow = db.select().from(roster)
-    .where(and(isNull(roster.weekStart), eq(roster.day, day), eq(roster.memberId, memberId))).all()[0];
-  return baseRow?.jamSelesai ?? null;
+  if (overrideRow) return overrideRow;
+  return db.select().from(roster)
+    .where(and(isNull(roster.weekStart), eq(roster.day, day), eq(roster.memberId, memberId))).all()[0] ?? null;
+};
+const jamSelesaiAt = (tanggal: string, memberId: string): string | null => rosterRowAt(tanggal, memberId)?.jamSelesai ?? null;
+
+// ---- Aturan absen: jendela waktu, status terlambat, geofence mako ----
+const envNum = (name: string, def: number) => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v >= 0 ? v : def;
+};
+const ABSEN = {
+  bukaMenit: envNum('ABSEN_BUKA_MENIT', 30), // absen dibuka N menit sebelum jam mulai
+  telatMenit: envNum('ABSEN_TELAT_MENIT', 15), // lewat N menit dari jam mulai = terlambat
+  radiusDefault: envNum('MAKO_RADIUS_M', 100),
+  gpsToleransi: envNum('GPS_TOLERANSI_M', 50), // maks akurasi GPS yang ditambahkan ke radius
+  gpsAccMax: envNum('GPS_ACC_MAX_M', 200), // akurasi lebih buruk dari ini = tolak (GPS lemah)
+};
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const atJam = (tanggal: string, hhmm: string, plusMin = 0) => {
+  const [h, m] = hhmm.split('.').map(Number);
+  const d = new Date(tanggal + 'T00:00');
+  d.setHours(h, m + plusMin, 0, 0);
+  return d;
+};
+const fmtJam = (d: Date) => `${pad2(d.getHours())}.${pad2(d.getMinutes())}`;
+
+type AbsenStatus = 'tepat' | 'terlambat';
+const absenWindow = (tanggal: string, memberId: string, now = new Date()):
+  { ok: true; status: AbsenStatus } | { ok: false; error: string } => {
+  const row = rosterRowAt(tanggal, memberId);
+  if (!row) return { ok: false, error: 'Kamu tidak piket hari ini.' };
+  const buka = atJam(tanggal, row.jamMulai, -ABSEN.bukaMenit);
+  if (now < buka) return { ok: false, error: `Absen dibuka mulai ${fmtJam(buka)} (${ABSEN.bukaMenit} menit sebelum piket ${row.jamMulai}).` };
+  if (now > atJam(tanggal, row.jamSelesai)) return { ok: false, error: `Absen sudah ditutup — piket selesai ${row.jamSelesai}.` };
+  return { ok: true, status: now > atJam(tanggal, row.jamMulai, ABSEN.telatMenit) ? 'terlambat' : 'tepat' };
 };
 
+const getSetting = (key: string) => db.select().from(settings).where(eq(settings.key, key)).all()[0]?.value;
+const makoConfig = () => {
+  const lat = Number(getSetting('mako_lat'));
+  const lng = Number(getSetting('mako_lng'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || getSetting('mako_lat') === undefined) return null;
+  const r = Number(getSetting('mako_radius'));
+  return { lat, lng, radius: Number.isFinite(r) && r > 0 ? r : ABSEN.radiusDefault };
+};
+// Jarak 2 titik GPS (meter), rumus haversine.
+const jarakMeter = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+  const R = 6_371_000;
+  const rad = (x: number) => (x * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+// Catatan: koordinat berasal dari HP (bisa dipalsukan aplikasi fake GPS) —
+// geofence menyaring kasus umum, bukan pengganti verifikasi wajah.
+const absenGeo = (geo: unknown):
+  { ok: true; lat: number; lng: number; acc: number; jarakM: number } | { ok: false; error: string } => {
+  const mako = makoConfig();
+  if (!mako) return { ok: false, error: 'Lokasi mako belum diatur superadmin — absen belum bisa dipakai.' };
+  const g = (geo ?? {}) as { lat?: unknown; lng?: unknown; acc?: unknown };
+  const lat = Number(g.lat);
+  const lng = Number(g.lng);
+  const acc = Number(g.acc);
+  if (g.lat == null || g.lng == null || !Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(acc)) {
+    return { ok: false, error: 'Lokasi tidak terbaca — izinkan akses lokasi (GPS) untuk absen.' };
+  }
+  if (acc > ABSEN.gpsAccMax) {
+    return { ok: false, error: `Sinyal GPS lemah (±${Math.round(acc)} m) — coba dekat jendela / area terbuka, lalu ulangi.` };
+  }
+  const jarakM = Math.round(jarakMeter({ lat, lng }, mako));
+  if (jarakM > mako.radius + Math.min(acc, ABSEN.gpsToleransi)) {
+    return { ok: false, error: `Kamu di luar area mako (±${jarakM} m dari mako, batas ${mako.radius} m).` };
+  }
+  return { ok: true, lat, lng, acc: Math.round(acc), jarakM };
+};
+
+const hasAttended = (tanggal: string, memberId: string) =>
+  db.select({ id: attendance.id }).from(attendance)
+    .where(and(eq(attendance.tanggal, tanggal), eq(attendance.memberId, memberId))).all().length > 0;
+
 app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
-  const { tanggal, memberId, attest } = (req.body ?? {}) as { tanggal: string; memberId: string; attest?: string };
+  const { tanggal, memberId, attest, geo: geoIn } = (req.body ?? {}) as {
+    tanggal: string; memberId: string; attest?: string; geo?: unknown;
+  };
   if (tanggal !== todayLocal()) return void res.status(400).json({ error: 'absen hanya untuk hari ini' });
   const member = db.select().from(members).where(eq(members.id, memberId)).all()[0];
   if (!member) return void res.status(400).json({ error: 'anggota invalid' });
   if (!onDutyAt(tanggal, memberId)) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
   if (!checkAttest(attest, memberId, tanggal)) return void res.status(403).json({ error: 'Login dulu hari ini.' });
+  if (hasAttended(tanggal, memberId)) return void res.json({ ok: true, already: true });
+  // Dicek ulang di sini (jangan percaya hasil cek saat minta challenge).
+  const win = absenWindow(tanggal, memberId);
+  if (!win.ok) return void res.status(400).json({ error: win.error });
+  const geo = absenGeo(geoIn);
+  if (!geo.ok) return void res.status(400).json({ error: geo.error });
   // Bukti hadir = verifikasi wajah BARU saat absen (bukan sisa login pagi).
   let face;
   try {
@@ -987,13 +1081,12 @@ app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
   const matched = sim >= FACE_CFG.matchMin;
   logCheck({ purpose: 'absen', memberId, ok: matched, reason: matched ? null : 'no_match', scores: face.out.scores, similarity: sim });
   if (!matched) return void res.status(401).json({ error: `Wajah tidak cocok dengan ${member.nama} — absen harus oleh orangnya langsung.` });
-  const already = db.select().from(attendance).all()
-    .some((r) => r.tanggal === tanggal && r.memberId === memberId);
-  if (already) return void res.json({ ok: true, already: true });
-  const now = new Date();
-  const jam = `${String(now.getHours()).padStart(2, '0')}.${String(now.getMinutes()).padStart(2, '0')}`;
-  db.insert(attendance).values({ tanggal, memberId, jam, createdAt: Date.now() }).run();
-  res.json({ ok: true, jam });
+  const jam = fmtJam(new Date());
+  db.insert(attendance).values({
+    tanggal, memberId, jam, createdAt: Date.now(), status: win.status,
+    lat: geo.lat, lng: geo.lng, acc: geo.acc, jarakM: geo.jarakM,
+  }).run();
+  res.json({ ok: true, jam, status: win.status });
 });
 
 // Selfie absen (terenkripsi) — HANYA admin/superadmin boleh minta lihat.
@@ -1042,6 +1135,7 @@ app.post('/api/evidence', (req, res) => {
   const dayName = dow >= 1 && dow <= 5 ? DAYS[dow - 1] : null;
   const onDuty = dayName && onDutyAt(tanggal, memberId);
   if (!onDuty) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
+  if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   const task = ensureChecks(tanggal, memberId).find((t) => t.judul === tugas);
   const master = !task
     ? db.select().from(tugasMaster).where(eq(tugasMaster.judul, tugas)).all()[0]
@@ -1096,6 +1190,7 @@ app.post('/api/lapsit', (req, res) => {
     return void res.status(403).json({ error: 'verifikasi wajah/PIN dulu hari ini' });
   }
   if (!onDutyAt(tanggal, memberId)) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
+  if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   // Lapsit cuma boleh dikirim maks 30 menit SEBELUM jam selesai piket
   // (jam diatur admin di jadwal, ikut override minggu berjalan kalau ada).
   // Cek hanya berlaku utk tanggal HARI INI — laporan tanggal lampau (yg
@@ -1148,12 +1243,16 @@ app.get('/api/breakdown', (req, res) => {
 });
 
 app.post('/api/breakdown', (req, res) => {
-  const { tanggal, memberId, itemKey, done } = (req.body ?? {}) as {
-    tanggal: string; memberId: string; itemKey: string; done: boolean;
+  const { tanggal, memberId, itemKey, done, attest } = (req.body ?? {}) as {
+    tanggal: string; memberId: string; itemKey: string; done: boolean; attest?: string;
   };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal ?? '')) return void res.status(400).json({ error: 'tanggal invalid' });
   const member = db.select({ id: members.id }).from(members).where(eq(members.id, memberId)).all()[0];
   if (!member) return void res.status(400).json({ error: 'anggota invalid' });
+  // Rincian tugas ikut menentukan nilai (30%) → wajib login + sudah absen, cuma utk diri sendiri.
+  if (!checkAttest(attest, memberId, tanggal)) return void res.status(403).json({ error: 'Login dulu hari ini.' });
+  if (!onDutyAt(tanggal, memberId)) return void res.status(400).json({ error: 'tidak piket di tanggal itu' });
+  if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   if (!/^\d+:\d+$/.test(itemKey ?? '')) return void res.status(400).json({ error: 'itemKey invalid' });
   const existing = db.select().from(breakdown)
     .where(and(eq(breakdown.tanggal, tanggal), eq(breakdown.memberId, memberId), eq(breakdown.itemKey, itemKey))).all()[0];
@@ -1233,6 +1332,28 @@ app.get('/api/settings', (_req, res) => {
   const out: Record<string, string> = {};
   for (const s of db.select().from(settings).all()) out[s.key] = s.value;
   res.json(out);
+});
+
+const setSetting = (key: string, value: string) => {
+  const ex = db.select().from(settings).where(eq(settings.key, key)).all()[0];
+  if (ex) db.update(settings).set({ value }).where(eq(settings.key, key)).run();
+  else db.insert(settings).values({ key, value }).run();
+};
+
+// Lokasi mako (geofence absen) — diatur superadmin, biasanya "pakai lokasi saya" di mako.
+app.put('/api/settings/mako', requireSuper, (req, res) => {
+  const { lat, lng, radius } = (req.body ?? {}) as { lat: unknown; lng: unknown; radius: unknown };
+  const la = Number(lat);
+  const ln = Number(lng);
+  const r = Math.round(Number(radius));
+  if (!Number.isFinite(la) || la < -90 || la > 90 || !Number.isFinite(ln) || ln < -180 || ln > 180) {
+    return void res.status(400).json({ error: 'koordinat invalid' });
+  }
+  if (!Number.isFinite(r) || r < 20 || r > 2000) return void res.status(400).json({ error: 'radius 20–2000 m' });
+  setSetting('mako_lat', String(la));
+  setSetting('mako_lng', String(ln));
+  setSetting('mako_radius', String(r));
+  res.json({ ok: true });
 });
 
 app.put('/api/settings', requireSuper, (req, res) => {

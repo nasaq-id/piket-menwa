@@ -16,7 +16,10 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 - **Sesi harian** — login berlaku 1 hari.
 
 ### 🧑‍💼 Piket Harian
-- **Absensi wajah wajib** — verifikasi wajah BARU saat absen di mako (terpisah dari login), dinilai di server; checklist & bukti baru terbuka setelah absen.
+- **Absensi wajah wajib di mako** — scan wajah BARU saat absen (terpisah dari login), dinilai di server. Syarat dicek server sebelum kamera terbuka:
+  - **Jadwal & jam**: absen dibuka 30 menit sebelum jam mulai s/d jam selesai; lewat 15 menit dari jam mulai tercatat **terlambat**.
+  - **Geofence**: GPS HP harus di dalam radius mako (diatur superadmin di `#super` → "Pakai lokasi saya sekarang"). Koordinat mentah tidak ditampilkan publik — cuma status & jarak ke mako. Catatan: GPS bisa dipalsukan aplikasi fake GPS; geofence menyaring kasus umum.
+  - Foto bukti, rincian tugas, & lapsit **ditolak server** sebelum absen (bukan cuma dikunci di UI).
 - **Bukti foto wajib (4 item)** — otomatis terkompres **WebP ≤ 40KB** di HP, dibakar stempel **tanggal + jam + koordinat + logo organisasi**, immutable (tidak bisa ubah/hapus).
 - **Lapsit akhir piket** — catatan + timestamp server + geolocation, terkunci sampai 4 foto lengkap.
 - **Rincian 34 tugas** (5 kategori akordeon) — checklist per shift, tersimpan di server.
@@ -34,7 +37,7 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 | Peran | Akses |
 |---|---|
 | Anggota | Jadwal, absen, bukti, lapsit, tukar, rincian tugas |
-| Admin (PIN) | Susun roster + jam, drag-and-drop mingguan, override tukar, putar rotasi |
+| Admin (PIN) | Susun petugas piket + jam, drag-and-drop mingguan, override tukar, putar rotasi |
 | Superadmin (PIN + `#super`) | Dashboard monitoring: pengguna, rekap harian, foto, lapsit, log aktivitas, leaderboard, hapus data |
 
 ### 🔒 Privasi Face Recognition
@@ -86,6 +89,8 @@ Buka `http://localhost:5173` (kamera butuh HTTPS di HP — pakai tunnel, mis. `c
 | `FACE_ENC_KEY` | Ya | base64 32 byte — enkripsi embedding wajah (jangan masuk git!) |
 | `COMPREFACE_URL` | — | Default `http://127.0.0.1:8000` |
 | `COMPREFACE_DETECT_KEY` | Ya | API key service DETECTION di CompreFace |
+| `ABSEN_BUKA_MENIT` / `ABSEN_TELAT_MENIT` | — | Default `30` / `15` — jendela absen & batas terlambat (menit) |
+| `MAKO_RADIUS_M` / `GPS_TOLERANSI_M` / `GPS_ACC_MAX_M` | — | Default `100` / `50` / `200` — radius default, toleransi akurasi GPS, akurasi terburuk yang diterima |
 | `ADMIN_PIN` | — | Default `1234` — mode Admin |
 | `SUPER_PIN` | — | Default `041294` — dashboard `#super` |
 | `VAPID_PUBLIC` / `VAPID_PRIVATE` | — | Auto-generate ke `server/.vapid.json` bila kosong |
@@ -104,7 +109,7 @@ Autentikasi aksi sensitif: identitas member dari sesi login; admin pakai header 
 | Bukti/Lapsit | `POST /api/evidence`, `GET /api/evidence` (signed URL), `POST /api/lapsit` |
 | Rincian | `GET/POST /api/breakdown`, `GET /api/checks` |
 | Tukar | `POST /api/swaps`, `POST /api/swaps/:id/decide`, `POST /api/swaps/:id/cancel` |
-| Roster | `PUT /api/roster`, `GET/PUT/DELETE /api/roster/week` (admin) |
+| Petugas piket | `PUT /api/roster`, `GET/PUT/DELETE /api/roster/week` (admin) |
 | Nilai | `GET /api/nilai/today`, `GET /api/nilai/leaderboard`, `GET /api/nilai/master` |
 | Push/Presence | `GET /api/push/public-key`, `POST /api/push/subscribe`, `POST /api/presence` |
 | Super | `POST /api/super/verify`, `GET /api/super/overview`, `GET /api/super/feed` |
@@ -128,7 +133,7 @@ Autentikasi aksi sensitif: identitas member dari sesi login; admin pakai header 
 ### 🎨 Ganti Brand Organisasi Lain
 1. Timpa `public/brand/logo-menwa.png` dengan logo sendiri.
 2. `python3 scripts/gen-icons.py` → ikon home-screen, splash, favicon ke-regenerate.
-3. Sesuaikan nama di `index.html` + `vite.config.ts` (manifest) + roster/bobot di seed.
+3. Sesuaikan nama di `index.html` + `vite.config.ts` (manifest) + petugas piket/bobot di seed.
 
 ---
 

@@ -74,3 +74,13 @@ export function dateStr(offset = 0): string {
   const d = String(t.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
+
+// Jendela absen — cermin default server (ABSEN_BUKA_MENIT / ABSEN_TELAT_MENIT).
+// Hanya untuk teks petunjuk; keputusan tetap di server.
+export const ABSEN_BUKA_MENIT = 30;
+export const ABSEN_TELAT_MENIT = 15;
+export const geserJam = (hhmm: string, menit: number) => {
+  const [h, m] = hhmm.split('.').map(Number);
+  const t = (h * 60 + m + menit + 1440) % 1440;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}.${String(t % 60).padStart(2, '0')}`;
+};

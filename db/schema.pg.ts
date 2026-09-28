@@ -125,6 +125,11 @@ export const attendance = pgTable('attendance', {
     .references(() => members.id),
   jam: text('jam').notNull(),
   createdAt: integer('created_at').notNull(),
+  status: text('status').notNull().default('tepat'),
+  lat: doublePrecision('lat'),
+  lng: doublePrecision('lng'),
+  acc: integer('acc'),
+  jarakM: integer('jarak_m'),
 });
 
 export const tugasMaster = pgTable('tugas_master', {

@@ -189,6 +189,16 @@ try {
     sqlite.exec('ALTER TABLE attendance DROP COLUMN selfie_enc');
     console.log('migrasi attendance -selfie_enc ok');
   }
+  // Absen: status tepat/terlambat + posisi & jarak ke mako (geofence).
+  for (const [col, ddl] of [
+    ['status', "status TEXT NOT NULL DEFAULT 'tepat'"],
+    ['lat', 'lat REAL'], ['lng', 'lng REAL'], ['acc', 'acc INTEGER'], ['jarak_m', 'jarak_m INTEGER'],
+  ] as const) {
+    if (!acols.some((c) => c.name === col)) {
+      sqlite.exec(`ALTER TABLE attendance ADD COLUMN ${ddl}`);
+      console.log(`migrasi attendance +${col} ok`);
+    }
+  }
   const rcols = sqlite.prepare('PRAGMA table_info(roster)').all() as { name: string }[];
   if (!rcols.some((c) => c.name === 'week_start')) {
     sqlite.exec('ALTER TABLE roster ADD COLUMN week_start TEXT');

@@ -128,6 +128,27 @@ export async function superGet<T>(path: string): Promise<T | null> {
   }
 }
 
+export async function superPut(path: string, body: unknown): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await fetch(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(getSuperPin() ? { 'x-super-pin': getSuperPin() as string } : {}) },
+      body: JSON.stringify(body),
+    });
+    const j = (await r.json()) as { error?: string };
+    return r.ok ? { ok: true } : { ok: false, error: j.error ?? 'gagal' };
+  } catch {
+    return { ok: false, error: 'offline' };
+  }
+}
+
+// Lokasi mako untuk geofence absen (null = belum diatur superadmin).
+export async function loadMako(): Promise<{ lat: number; lng: number; radius: number } | null> {
+  const s = await get<Record<string, string>>('/api/settings');
+  if (!s?.mako_lat || !s.mako_lng) return null;
+  return { lat: Number(s.mako_lat), lng: Number(s.mako_lng), radius: Number(s.mako_radius ?? 100) };
+}
+
 export interface Overview {
   members: number; faces: number; roster: number; online: number;
   attToday: number; attTotal: number; evToday: number; lapsitToday: number;
@@ -337,7 +358,7 @@ export const clearAttest = () => {
 export type FaceAction = 'kiri' | 'kanan';
 export type FacePurpose = 'register' | 'login' | 'identify' | 'absen';
 export async function requestChallenge(
-  purpose: FacePurpose, extra: { preToken?: string; memberId?: string } = {},
+  purpose: FacePurpose, extra: { preToken?: string; memberId?: string; geo?: GeoFix | null } = {},
 ): Promise<{ ok: true; challengeId: string; action: FaceAction } | { ok: false; error: string }> {
   const attest = extra.memberId ? getAttest(extra.memberId, dateStr(0)) : undefined;
   const r = await postResult<{ challengeId: string; action: FaceAction }>(
@@ -348,19 +369,21 @@ export async function requestChallenge(
 
 export interface AttRow {
   id: number; tanggal: string; memberId: string; jam: string; createdAt: number;
+  status: 'tepat' | 'terlambat'; jarakM: number | null; // jarak ke mako saat absen
 }
+export interface GeoFix { lat: number; lng: number; acc: number }
 
 export async function loadAttendance(from: string, to: string): Promise<AttRow[] | null> {
   return get<AttRow[]>(`/api/attendance?from=${from}&to=${to}`);
 }
 
 export async function markAttendance(
-  tanggal: string, memberId: string, challengeId: string, frames: string[],
-): Promise<{ ok: boolean; error?: string }> {
-  const r = await postResult<{ ok: true }>(
-    '/api/attendance', { tanggal, memberId, attest: getAttest(memberId, tanggal), challengeId, frames }, 'gagal absen',
+  tanggal: string, memberId: string, challengeId: string, frames: string[], geo: GeoFix | null,
+): Promise<{ ok: true; jam?: string; status?: AttRow['status'] } | { ok: false; error: string }> {
+  const r = await postResult<{ jam?: string; status?: AttRow['status'] }>(
+    '/api/attendance', { tanggal, memberId, attest: getAttest(memberId, tanggal), challengeId, frames, geo }, 'gagal absen',
   );
-  return r.ok ? { ok: true } : r;
+  return r.ok ? { ok: true, ...r.data } : r;
 }
 
 // Heartbeat presence (fire-and-forget, tanpa PIN).
@@ -573,7 +596,7 @@ export async function toggleBreakdown(tanggal: string, memberId: string, itemKey
     const r = await fetch('/api/breakdown', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tanggal, memberId, itemKey, done }),
+      body: JSON.stringify({ tanggal, memberId, itemKey, done, attest: getAttest(memberId, tanggal) }),
     });
     return r.ok;
   } catch {

@@ -492,3 +492,8 @@ button:active { transform:scale(.97); }
 .tapHint { margin-top:-4px; font-size:11px; opacity:.55; }
 .loginform { overflow:hidden; }
 .wfield .hint.ok { color:#4ade80; }
+.attrow .badge-no.late { color:#f87171; background:rgba(248,113,113,.12); }
+.makopanel { display:flex; flex-direction:column; gap:8px; text-align:left; }
+.makopanel b { display:inline-flex; align-items:center; gap:6px; }
+.makopanel a { color:#4ade80; }
+.hist .late { color:#f87171; }

@@ -145,6 +145,12 @@ export const attendance = sqliteTable('attendance', {
     .references(() => members.id),
   jam: text('jam').notNull(), // HH.MM
   createdAt: integer('created_at').notNull(),
+  status: text('status').notNull().default('tepat'), // tepat | terlambat (lihat ABSEN_TELAT_MENIT)
+  // Posisi HP saat absen (geofence mako) — jarakM = jarak ke titik mako.
+  lat: real('lat'),
+  lng: real('lng'),
+  acc: integer('acc'),
+  jarakM: integer('jarak_m'),
 });
 
 // ---- Penilaian otomatis: master bobot tugas (dipakai validasi foto + seed) ----

@@ -7,6 +7,7 @@ import {
   type LapsitRow, type Overview, type SwapRow,
 } from './api';
 import { dateStr } from './piket';
+import { MakoPanel } from './components/MakoPanel';
 
 const fmtTime = (t: number) =>
   new Date(t).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -137,6 +138,9 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
         ))}
       </div>
 
+      <h2>Pengaturan absen</h2>
+      <MakoPanel />
+
       <h2>Leaderboard Nilai (rahasia)</h2>
       <div className="row">
         <input type="date" value={lbFrom} onChange={(e) => e.target.value && setLbFrom(e.target.value)} />
@@ -179,7 +183,10 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
       <h3>Absensi ({att.length})</h3>
       {att.length === 0 && <p className="hint">Belum ada absen.</p>}
       {att.map((a) => (
-        <p key={a.id} className="hist">{nama(a.memberId)} — hadir {a.jam}</p>
+        <p key={a.id} className="hist">
+          {nama(a.memberId)} — {a.status === 'terlambat' ? <b className="late">terlambat</b> : 'hadir'} {a.jam}
+          {a.jarakM != null && <span className="dim"> · {a.jarakM} m dari mako</span>}
+        </p>
       ))}
       <h3>Bukti foto ({ev.length}/{state?.templateLen ?? 0} tugas)</h3>
       <div className="evthumbs">
