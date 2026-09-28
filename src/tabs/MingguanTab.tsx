@@ -1,8 +1,10 @@
+import { motion } from 'framer-motion';
 import { ArrowLeftRight, Check, Clock, Plus, Repeat, X } from 'lucide-react';
-import { DAYS, dateStr } from '../piket';
+import { DAYS, dateStr, type DayKey } from '../piket';
 import { isOnline } from '../api';
 import type { AppStore } from '../hooks/useAppStore';
 import { WeekDragBoard } from '../components/WeekDragBoard';
+import { Button } from '../components/Button';
 import { Empty } from '../components/Empty';
 
 export function MingguanTab({ store }: { store: AppStore }) {
@@ -11,16 +13,35 @@ export function MingguanTab({ store }: { store: AppStore }) {
     dragSaving, weekOverridden, weekDates, members, moveWeekMember, saveWeekDrag,
     resetWeekDrag, clearWeekOverride, state, nama, warna, removeFrom, addTo,
     pickDay, setPickDay, jamColon, setJam, weekEv, setPreview, swappedDays,
-    weekStat, approvedSwaps, putarRotasi, faces,
+    weekStat, approvedSwaps, putarRotasi, faces, ask,
   } = store;
+  const hapusPetugas = async (day: DayKey, id: string) => {
+    const ok = await ask({
+      title: `Hapus ${nama(id)} dari ${day}?`,
+      message: 'Petugas dihapus dari jadwal hari itu.',
+      confirmLabel: 'Hapus',
+      danger: true,
+    });
+    if (ok) void removeFrom(day, id);
+  };
   return (
     <>
-      <div className="minggufill">
+      {admin && (
+        <motion.p
+          className="adminbanner"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          Mode admin — perubahan jadwal langsung tersimpan
+        </motion.p>
+      )}
+      <div className={`minggufill${admin ? ' is-admin' : ''}`}>
         <div className="weeknav">
           <b>{rangeLabel}</b>
           <span>
-            <button onClick={() => setWeekOff((w) => w - 1)}>‹</button>
-            <button onClick={() => setWeekOff((w) => w + 1)}>›</button>
+            <Button variant="secondary" ariaLabel="Minggu sebelumnya" onClick={() => setWeekOff((w) => w - 1)} style={{ width: '44px', padding: 0 }}>‹</Button>
+            <Button variant="secondary" ariaLabel="Minggu berikutnya" onClick={() => setWeekOff((w) => w + 1)} style={{ width: '44px', padding: 0 }}>›</Button>
           </span>
         </div>
         {admin && weekOff !== 0 ? (
@@ -60,7 +81,7 @@ export function MingguanTab({ store }: { store: AppStore }) {
                   {admin && (
                     <span className="dedit">
                       {crewIds.map((id) => (
-                        <button key={id} className="x" onClick={() => removeFrom(d, id)}>{nama(id)} <X size={11} /></button>
+                        <Button key={id} variant="secondary" ariaLabel={`Hapus ${nama(id)} dari ${d}`} onClick={() => void hapusPetugas(d, id)} style={{ minHeight: '44px' }}>{nama(id)} <X size={11} /></Button>
                       ))}
                       <button className="addbtn" onClick={() => setPickDay(pickDay === d ? null : d)}>
                         <Plus size={13} /> Tambah personel

@@ -28,7 +28,8 @@ export function HariTab({ store }: { store: AppStore }) {
 
   // ---- Stepper (turunan tampilan saja, tanpa request baru) ----
   const isPetugas = today !== 'Libur' && crew.includes(me);
-  const lapsitSent = lapsit.length > 0;
+  const myLapsitSent = lapsit.some((l) => l.memberId === me);
+  const lapsitSent = myLapsitSent;
   const buktiLengkap = checks.length > 0 && ev.length >= checks.length;
   const active: StepId | null = !isPetugas
     ? null
@@ -275,7 +276,7 @@ export function HariTab({ store }: { store: AppStore }) {
           </AnimatePresence>
           <div id="sec-lapsit" style={{ scrollMarginTop: '12px' }}>
           <h2>Catatan Lapsit — Akhir Piket</h2>
-          {lapsit.length > 0 ? (
+          {myLapsitSent ? (
             lapsit.map((l) => (
               <div key={l.id} className="card sm">
                 <b>{nama(l.memberId)}</b>

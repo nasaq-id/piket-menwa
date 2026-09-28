@@ -174,9 +174,9 @@ export function useAppStore() {
   const [pinInput, setPinInput] = useState('');
   const [online, setOnline] = useState(navigator.onLine);
 
-  const [target, setTarget] = useState('maxwell');
-  const [fromDay, setFromDay] = useState<DayKey>('Senin');
-  const [toDay, setToDay] = useState<DayKey>('Selasa');
+  const [target, setTarget] = useState('');
+  const [fromDay, setFromDay] = useState<DayKey | null>(null);
+  const [toDay, setToDay] = useState<DayKey | null>(null);
   const [alasan, setAlasan] = useState('');
   const [weekOff, setWeekOff] = useState(0);
   const [weekStat, setWeekStat] = useState<Record<string, boolean>>({});
@@ -449,21 +449,26 @@ export function useAppStore() {
     () => DAYS.filter((d) => state?.schedule[d]?.includes(me)), [state, me],
   );
 
-  // jaga default pilihan tetap valid saat ganti user / data reload
+  // jaga pilihan tetap valid saat ganti user / data reload — tanpa
+  // memilih otomatis (default kosong sampai user memilih).
   useEffect(() => {
     if (!state) return;
-    if (!state.schedule[fromDay]?.includes(me)) {
-      const first = DAYS.find((d) => state.schedule[d]?.includes(me));
-      if (first) setFromDay(first);
+    if (fromDay && !state.schedule[fromDay]?.includes(me)) {
+      setFromDay(null);
+      setToDay(null);
+      setTarget('');
+      return;
     }
-    if (target === me || !state.schedule[toDay]?.includes(target) || toDay === fromDay) {
-      const cand = DAYS.flatMap((d) =>
-        (state.schedule[d] ?? []).filter((m) => m !== me).map((m) => ({ d, m })),
-      ).find((c) => c.d !== (state.schedule[fromDay]?.includes(me) ? fromDay : DAYS.find((d) => state.schedule[d]?.includes(me))));
-      if (cand) { setToDay(cand.d); setTarget(cand.m); }
+    if (toDay && toDay === fromDay) {
+      setToDay(null);
+      setTarget('');
+      return;
+    }
+    if (toDay && target && (target === me || !state.schedule[toDay]?.includes(target))) {
+      setTarget('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, me, fromDay]);
+  }, [state, me]);
 
   const taskTap = (c: TaskRow) => {
     if (!unlocked) return needVerify();
@@ -650,6 +655,10 @@ export function useAppStore() {
   };
 
   const submitSwap = async () => {
+    if (!fromDay || !toDay || !target) {
+      setToast({ msg: 'Lengkapi pilihan hari asal, hari tujuan, dan rekan tukar dulu.', kind: 'error' });
+      return;
+    }
     if (target === me) {
       setToast({ msg: 'Pilih rekan tukar yang beda.', kind: 'error' });
       return;

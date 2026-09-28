@@ -8,6 +8,7 @@ import { GripVertical } from 'lucide-react';
 import { DAYS, dateStr } from '../piket';
 import type { Member } from '../api';
 import type { DayKey } from '../piket';
+import { Button } from './Button';
 import { Empty } from './Empty';
 
 // ---- Drag-drop jadwal mingguan (minggu depan/seterusnya) ----
@@ -134,15 +135,15 @@ export function WeekDragBoard({
         </DragOverlay>
       </DndContext>
       <div className="dragactions">
-        <button className="ghostbtn sm" onClick={onReset} disabled={!dragDirty || dragSaving}>Batal</button>
+        <Button variant="secondary" onClick={onReset} disabled={!dragDirty || dragSaving}>Batal</Button>
         {weekOverridden && (
-          <button className="ghostbtn sm danger" onClick={onClearOverride} disabled={dragSaving}>
+          <Button variant="danger" onClick={onClearOverride} disabled={dragSaving}>
             Kembalikan ke dasar
-          </button>
+          </Button>
         )}
-        <button className="primary sm" onClick={onSave} disabled={!dragDirty || dragSaving}>
-          {dragSaving ? 'Menyimpan…' : 'Simpan jadwal minggu ini'}
-        </button>
+        <Button variant="primary" busy={dragSaving} onClick={onSave} disabled={!dragDirty || dragSaving}>
+          Simpan jadwal minggu ini
+        </Button>
       </div>
     </div>
   );
