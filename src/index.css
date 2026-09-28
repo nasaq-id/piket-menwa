@@ -473,3 +473,18 @@ button:active { transform:scale(.97); }
 .welcome .row .btn { margin-top:0; flex:1; }
 .dupebox .btn { margin-top:6px; width:100%; }
 .morebtn { align-self:flex-start; background:none; border:none; color:var(--accent); font-size:13px; font-weight:700; text-decoration:underline; cursor:pointer; min-height:44px; min-width:44px; padding:10px 12px 10px 0; font-family:inherit; }
+
+/* ---- Fase 6: tab superadmin + tabel scroll + presence ---- */
+.suptabs { position:sticky; top:0; z-index:5; display:flex; gap:4px; background:var(--bg); border:1px solid var(--line); border-radius:var(--radius); padding:4px; }
+.suptab { position:relative; flex:1; min-height:44px; min-width:44px; background:transparent; border:none; border-radius:var(--radius); color:var(--dim); font-family:inherit; font-size:var(--fs-sm); font-weight:700; cursor:pointer; padding:var(--space-2) var(--space-1); }
+.suptabind { position:absolute; inset:0; border:1px solid var(--accent); border-radius:var(--radius); background:rgba(232,240,236,.06); }
+.suptabtx { position:relative; }
+.suptab.on { color:var(--ink); }
+.supscroll { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -18px; padding:0 18px; }
+.supscroll .suptable { min-width:560px; }
+.supdelbtn { min-height:44px; padding:8px 12px; font-size:13px; white-space:nowrap; }
+.presrow { display:inline-flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; }
+.offlinedot { width:9px; height:9px; border-radius:99px; background:var(--dim); flex:none; }
+.tac .suptabs { border-radius:var(--radius); background:rgba(7,11,9,.97); }
+.tac .suptab { border-radius:var(--radius); text-transform:uppercase; letter-spacing:1px; }
+.tac .suptabind { border-radius:var(--radius); background:rgba(74,222,128,.08); }

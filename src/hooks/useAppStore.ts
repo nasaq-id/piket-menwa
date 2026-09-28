@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useConfirm } from './useConfirm';
 import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
   dropPush, ensurePush, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
@@ -68,21 +69,8 @@ export function useAppStore() {
   const [lapsitBusy, setLapsitBusy] = useState(false);
   const [swapBusy, setSwapBusy] = useState(false);
   const [pinBusy, setPinBusy] = useState(false);
-  // Konfirmasi gaya sheet (pengganti popup browser) — Promise supaya
-  // pemanggil tetap sederhana: `const ok = await ask({...})`.
-  const [confirmReq, setConfirmReq] = useState<{ title: string; message: string; confirmLabel: string; danger: boolean } | null>(null);
-  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
-  const ask = useCallback((opts: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => {
-    setConfirmReq({ title: opts.title, message: opts.message, confirmLabel: opts.confirmLabel ?? 'Ya', danger: opts.danger ?? false });
-    return new Promise<boolean>((resolve) => {
-      confirmResolveRef.current = resolve;
-    });
-  }, []);
-  const resolveConfirm = useCallback((v: boolean) => {
-    confirmResolveRef.current?.(v);
-    confirmResolveRef.current = null;
-    setConfirmReq(null);
-  }, []);
+  // Konfirmasi gaya sheet (pengganti popup browser) — hook bersama dgn Super.
+  const { req: confirmReq, ask, resolve: resolveConfirm } = useConfirm();
   const [showKontak, setShowKontak] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);

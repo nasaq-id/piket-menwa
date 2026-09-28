@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   deleteMember, isOnline, loadAttendance, loadEvidence, loadFaceSummary,
@@ -9,16 +9,37 @@ import {
 import { dateStr } from './piket';
 import { MakoPanel } from './components/MakoPanel';
 import { Button } from './components/Button';
-import { ConfirmSheet, type ConfirmRequest } from './components/ConfirmSheet';
+import { ConfirmSheet } from './components/ConfirmSheet';
 import { Empty } from './components/Empty';
+import { PhotoPreview } from './components/PhotoPreview';
 import { Toast } from './components/Toast';
+import { useConfirm } from './hooks/useConfirm';
+import type { PreviewState } from './hooks/useAppStore';
 
 const fmtTime = (t: number) =>
   new Date(t).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+type SuperTab = 'ringkasan' | 'absensi' | 'anggota' | 'pengaturan';
+
+const TABS: { id: SuperTab; label: string }[] = [
+  { id: 'ringkasan', label: 'Ringkasan' },
+  { id: 'absensi', label: 'Absensi' },
+  { id: 'anggota', label: 'Anggota' },
+  { id: 'pengaturan', label: 'Pengaturan' },
+];
+
+const loadTab = (): SuperTab => {
+  try {
+    const t = sessionStorage.getItem('super-tab');
+    if (TABS.some((x) => x.id === t)) return t as SuperTab;
+  } catch { /* abaikan */ }
+  return 'ringkasan';
+};
+
 export default function SuperView({ onExit }: { onExit: () => void }) {
   const [ok, setOk] = useState(sessionStorage.getItem('super-pin') ? true : false);
   const [pin, setPin] = useState('');
+  const [tab, setTab] = useState<SuperTab>(loadTab);
   const [date, setDate] = useState(dateStr(0));
   const [state, setState] = useState<AppState | null>(null);
   const [ov, setOv] = useState<Overview | null>(null);
@@ -28,25 +49,19 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
   const [ev, setEv] = useState<EvidenceRow[]>([]);
   const [laps, setLaps] = useState<LapsitRow[]>([]);
   const [swaps, setSwaps] = useState<SwapRow[]>([]);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
   const [lbFrom, setLbFrom] = useState(() => dateStr(0).slice(0, 8) + '01');
   const [lbTo, setLbTo] = useState(() => dateStr(0));
   const [lb, setLb] = useState<{ memberId: string; nama: string; n: number; rata2: number | null }[]>([]);
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
-  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
-  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
-  const ask = (opts: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => {
-    setConfirmReq({ title: opts.title, message: opts.message, confirmLabel: opts.confirmLabel ?? 'Ya', danger: opts.danger ?? false });
-    return new Promise<boolean>((resolve) => {
-      confirmResolveRef.current = resolve;
-    });
-  };
-  const resolveConfirm = (v: boolean) => {
-    confirmResolveRef.current?.(v);
-    confirmResolveRef.current = null;
-    setConfirmReq(null);
-  };
+  const { req: confirmReq, ask, resolve: resolveConfirm } = useConfirm();
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('super-tab', tab);
+    } catch { /* abaikan */ }
+  }, [tab]);
 
   useEffect(() => {
     if (!toast) return;
@@ -161,119 +176,166 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
     >
       <div className="suphead">
         <h1>Superadmin</h1>
-        <button onClick={() => { sessionStorage.removeItem('super-pin'); onExit(); }}>Tutup</button>
+        <Button variant="secondary" onClick={() => { sessionStorage.removeItem('super-pin'); onExit(); }}>Tutup</Button>
       </div>
-      <div className="supcards">
-        {cards.map(([label, v], i) => (
-          <motion.div
-            key={label} className="supcard"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: i * 0.05, ease: 'easeOut' }}
+      <div className="suptabs" role="tablist" aria-label="Bagian superadmin">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`suptab${tab === t.id ? ' on' : ''}`}
+            onClick={() => setTab(t.id)}
           >
-            <b>{v ?? '…'}</b><span>{label}</span>
-          </motion.div>
+            {tab === t.id && (
+              <motion.span
+                layoutId="suptab-ind"
+                className="suptabind"
+                transition={{ type: 'tween', duration: 0.2, ease: 'easeOut' }}
+              />
+            )}
+            <span className="suptabtx">{t.label}</span>
+          </button>
         ))}
       </div>
 
-      <h2>Pengaturan absen</h2>
-      <MakoPanel />
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+        >
+          {tab === 'ringkasan' && (
+            <>
+              <div className="supcards">
+                {cards.map(([label, v], i) => (
+                  <motion.div
+                    key={label} className="supcard"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.05, ease: 'easeOut' }}
+                  >
+                    <b>{v ?? '…'}</b><span>{label}</span>
+                  </motion.div>
+                ))}
+              </div>
+              <h2>Log aktivitas</h2>
+              {feed.map((f, i) => (
+                <p key={i} className="hist">[{f.jenis}] {f.teks} <span className="dim">• {fmtTime(f.t)}</span></p>
+              ))}
+              {feed.length === 0 && <Empty text="Belum ada aktivitas." />}
+            </>
+          )}
 
-      <h2>Leaderboard Nilai (rahasia)</h2>
-      <div className="row">
-        <input type="date" value={lbFrom} onChange={(e) => e.target.value && setLbFrom(e.target.value)} />
-        <input type="date" value={lbTo} onChange={(e) => e.target.value && setLbTo(e.target.value)} />
-      </div>
-      <table className="suptable">
-        <thead><tr><th>#</th><th>Nama</th><th>Rata²</th><th>Dinilai</th></tr></thead>
-        <tbody>
-          {lb.map((r, i) => (
-            <tr key={r.memberId}>
-              <td>{i + 1}</td>
-              <td>{r.nama}</td>
-              <td><b>{r.rata2 ?? '—'}</b></td>
-              <td>{r.n}x</td>
-            </tr>
-          ))}
-          {lb.length === 0 && <tr><td colSpan={4} className="hint">Belum ada nilai terverifikasi.</td></tr>}
-        </tbody>
-      </table>
+          {tab === 'absensi' && (
+            <>
+              <h2>Rekap harian</h2>
+              <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Tanggal rekap" />
+              <h3>Absensi ({att.length})</h3>
+              {att.length === 0 && <Empty text="Belum ada absen." />}
+              {att.map((a) => (
+                <p key={a.id} className="hist">
+                  {nama(a.memberId)} — {a.status === 'terlambat' ? <b className="late">terlambat</b> : 'hadir'} {a.jam}
+                  {a.jarakM != null && <span className="dim"> · {a.jarakM} m dari mako</span>}
+                </p>
+              ))}
+              <h3>Bukti foto ({ev.length}/{state?.templateLen ?? 0} tugas)</h3>
+              <div className="evthumbs">
+                {ev.map((e) => (
+                  <img
+                    key={e.id} src={e.file} alt={e.tugas} title={`${e.tugas} — ${nama(e.memberId)}`}
+                    onClick={() => setPreview({ file: e.file, judul: e.tugas, by: nama(e.memberId), tanggal: e.tanggal })}
+                  />
+                ))}
+              </div>
+              {ev.length === 0 && <Empty text="Belum ada foto." />}
+              <h3>Lapsit ({laps.length})</h3>
+              {laps.map((l) => (
+                <div key={l.id} className="card sm">
+                  <b>{nama(l.memberId)}</b><span>{l.catatan}</span>
+                  <span className="dim">{l.lat && l.lng ? `${Number(l.lat).toFixed(5)}, ${Number(l.lng).toFixed(5)}` : 'GPS off'}</span>
+                </div>
+              ))}
+              {laps.length === 0 && <Empty text="Belum ada lapsit." />}
+              <h3>Tukar ({swaps.length})</h3>
+              {swaps.map((s) => (
+                <p key={s.id} className="hist">{nama(s.requester)} ⇄ {nama(s.target)} • {s.status}</p>
+              ))}
+              {swaps.length === 0 && <Empty text="Belum ada pengajuan tukar." />}
+            </>
+          )}
 
-      <h2>Pengguna ({members.length})</h2>
-      <table className="suptable">
-        <thead><tr><th></th><th>Nama</th><th>Jabatan</th><th>Wajah</th><th>Status</th><th></th></tr></thead>
-        <tbody>
-          {members.map((m) => (
-            <tr key={m.id}>
-              <td>{m.foto ? <img className="ava" src={m.foto} alt="" /> : <i className="pdot" style={{ background: m.warna }} />}</td>
-              <td>{m.nama}{m.angkatan ? ` · ${m.angkatan}` : ''}</td>
-              <td>{m.jabatan ?? '—'}</td>
-              <td>{(faces.find((f) => f.memberId === m.id)?.count ?? 0) || '—'}</td>
-              <td>{isOnline(m) ? '🟢 online' : '⚫'}</td>
-              <td><button className="supdel" onClick={() => void hapus(m.id, m.nama)}>hapus</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          {tab === 'anggota' && (
+            <>
+              <h2>Pengguna ({members.length})</h2>
+              <div className="supscroll">
+                <table className="suptable">
+                  <thead><tr><th></th><th>Nama</th><th>Jabatan</th><th>Wajah</th><th>Status</th><th></th></tr></thead>
+                  <tbody>
+                    {members.map((m) => {
+                      const on = isOnline(m);
+                      return (
+                        <tr key={m.id}>
+                          <td>{m.foto ? <img className="ava" src={m.foto} alt="" /> : <i className="pdot" style={{ background: m.warna }} />}</td>
+                          <td>{m.nama}{m.angkatan ? ` · ${m.angkatan}` : ''}</td>
+                          <td>{m.jabatan ?? '—'}</td>
+                          <td>{(faces.find((f) => f.memberId === m.id)?.count ?? 0) || '—'}</td>
+                          <td><span className="presrow"><i className={on ? 'onlinedot' : 'offlinedot'} aria-hidden="true" />{on ? 'online' : 'offline'}</span></td>
+                          <td>
+                            <Button variant="danger" className="supdelbtn" ariaLabel={`Hapus ${m.nama}`} onClick={() => void hapus(m.id, m.nama)}>
+                              Hapus
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-      <h2>Rekap harian</h2>
-      <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
-      <h3>Absensi ({att.length})</h3>
-      {att.length === 0 && <Empty text="Belum ada absen." />}
-      {att.map((a) => (
-        <p key={a.id} className="hist">
-          {nama(a.memberId)} — {a.status === 'terlambat' ? <b className="late">terlambat</b> : 'hadir'} {a.jam}
-          {a.jarakM != null && <span className="dim"> · {a.jarakM} m dari mako</span>}
-        </p>
-      ))}
-      <h3>Bukti foto ({ev.length}/{state?.templateLen ?? 0} tugas)</h3>
-      <div className="evthumbs">
-        {ev.map((e) => (
-          <img key={e.id} src={e.file} alt={e.tugas} title={`${e.tugas} — ${nama(e.memberId)}`} onClick={() => setPreview(e.file)} />
-        ))}
-      </div>
-      {ev.length === 0 && <Empty text="Belum ada foto." />}
-      <h3>Lapsit ({laps.length})</h3>
-      {laps.map((l) => (
-        <div key={l.id} className="card sm">
-          <b>{nama(l.memberId)}</b><span>{l.catatan}</span>
-          <span className="dim">{l.lat && l.lng ? `${Number(l.lat).toFixed(5)}, ${Number(l.lng).toFixed(5)}` : 'GPS off'}</span>
-        </div>
-      ))}
-      {laps.length === 0 && <Empty text="Belum ada lapsit." />}
-      <h3>Tukar ({swaps.length})</h3>
-      {swaps.map((s) => (
-        <p key={s.id} className="hist">{nama(s.requester)} ⇄ {nama(s.target)} • {s.status}</p>
-      ))}
-      {swaps.length === 0 && <Empty text="Belum ada pengajuan tukar." />}
+              <h2>Leaderboard Nilai (rahasia)</h2>
+              <div className="row">
+                <input type="date" value={lbFrom} onChange={(e) => e.target.value && setLbFrom(e.target.value)} aria-label="Nilai dari tanggal" />
+                <input type="date" value={lbTo} onChange={(e) => e.target.value && setLbTo(e.target.value)} aria-label="Nilai sampai tanggal" />
+              </div>
+              <div className="supscroll">
+                <table className="suptable">
+                  <thead><tr><th>#</th><th>Nama</th><th>Rata²</th><th>Dinilai</th></tr></thead>
+                  <tbody>
+                    {lb.map((r, i) => (
+                      <tr key={r.memberId}>
+                        <td>{i + 1}</td>
+                        <td>{r.nama}</td>
+                        <td><b>{r.rata2 ?? '—'}</b></td>
+                        <td>{r.n}x</td>
+                      </tr>
+                    ))}
+                    {lb.length === 0 && <tr><td colSpan={4} className="hint">Belum ada nilai terverifikasi.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
-      <h2>Log aktivitas</h2>
-      {feed.map((f, i) => (
-        <p key={i} className="hist">[{f.jenis}] {f.teks} <span className="dim">• {fmtTime(f.t)}</span></p>
-      ))}
-      {feed.length === 0 && <Empty text="Belum ada aktivitas." />}
+          {tab === 'pengaturan' && (
+            <>
+              <h2>Pengaturan absen</h2>
+              <MakoPanel />
+            </>
+          )}
+        </motion.div>
+      </AnimatePresence>
 
       <AnimatePresence>
         {preview && (
-          <motion.div
-            className="preview" onClick={() => setPreview(null)}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <motion.div
-              className="pvcard" onClick={(e) => e.stopPropagation()}
-              initial={{ opacity: 0, scale: 0.94, y: 14 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-            >
-              <div className="wmwrap">
-                <img src={preview} alt="bukti" />
-                <span className="wm">Admin • {new Date().toLocaleString('id-ID')}</span>
-              </div>
-              <button className="primary" onClick={() => setPreview(null)}>Tutup</button>
-            </motion.div>
-          </motion.div>
+          <PhotoPreview
+            preview={preview}
+            isAdmin
+            viewerName="Admin"
+            onClose={() => setPreview(null)}
+          />
         )}
       </AnimatePresence>
       <AnimatePresence>
