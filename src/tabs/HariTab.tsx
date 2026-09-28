@@ -63,7 +63,7 @@ export function HariTab({ store }: { store: AppStore }) {
           )}
           {crew.includes(me) && !unlocked && (
             <button className="bigbtn" onClick={needVerify}>
-              {att.some((a) => a.memberId === me) ? <><LockOpen size={15} /> Verifikasi wajah (buka checklist)</> : <><Camera size={15} /> Absen tiba (selfie wajah)</>}
+              {att.some((a) => a.memberId === me) ? <><LockOpen size={15} /> Verifikasi wajah (buka checklist)</> : <><Camera size={15} /> Absen tiba (scan wajah)</>}
             </button>
           )}
           {unlocked && <p className="hint"><Check size={13} /> Wajah terverifikasi — checklist & bukti terbuka sesi ini.</p>}

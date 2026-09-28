@@ -10,7 +10,7 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.png', 'libs/*.js', 'models/*'],
+      includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
         name: 'Jadwal Piket Menwa USB YPKP',
         short_name: 'PiketMenwa',

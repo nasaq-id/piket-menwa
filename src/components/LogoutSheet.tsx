@@ -1,11 +1,16 @@
 import { motion } from 'framer-motion';
 import type { RefObject } from 'react';
-import type { Member } from '../api';
+import type { AuthType, Member } from '../api';
+import { SecretField } from '../Welcome';
 
-export function LogoutSheet({ member, pinNew, setPinNew, pinMsg, setPinMsg, onSavePin, avatarBusy, avatarInputRef, onAvatarFile, onRemoveAvatar, onLogout, onClose }: {
+export function LogoutSheet({
+  member, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, onSaveSecret, onEditKontak,
+  avatarBusy, avatarInputRef, onAvatarFile, onRemoveAvatar, onLogout, onClose,
+}: {
   member: Member;
-  pinNew: string; setPinNew: (v: string) => void; pinMsg: string | null; setPinMsg: (v: string | null) => void;
-  onSavePin: () => void; avatarBusy: boolean;
+  secretType: AuthType; setSecretType: (t: AuthType) => void;
+  secretNew: string; setSecretNew: (v: string) => void; secretMsg: string | null; setSecretMsg: (v: string | null) => void;
+  onSaveSecret: () => void; onEditKontak: () => void; avatarBusy: boolean;
   avatarInputRef: RefObject<HTMLInputElement | null>;
   onAvatarFile: (f: File | undefined) => void; onRemoveAvatar: () => void;
   onLogout: () => void; onClose: () => void;
@@ -43,14 +48,15 @@ export function LogoutSheet({ member, pinNew, setPinNew, pinMsg, setPinMsg, onSa
         </div>
         <b>{member.nama}</b>
         <span className="hint">{[member.jabatan, member.angkatan].filter(Boolean).join(' · ')}</span>
+        <SecretField
+          label="Ganti PIN / password" authType={secretType} onAuthType={setSecretType}
+          value={secretNew} onChange={(v) => { setSecretNew(v); setSecretMsg(null); }}
+          onEnter={onSaveSecret} autoComplete="new-password"
+        />
         <div className="pinrow">
-          <input
-            type="password" inputMode="numeric" maxLength={12}
-            placeholder="PIN baru (min 6 digit)" value={pinNew}
-            onChange={(e) => { setPinNew(e.target.value.replace(/\D/g, '').slice(0, 12)); setPinMsg(null); }}
-          />
-          <button onClick={onSavePin}>Simpan PIN</button>
-          {pinMsg && <span className="pinmsg">{pinMsg}</span>}
+          <button onClick={onSaveSecret}>Simpan {secretType === 'pin' ? 'PIN' : 'password'}</button>
+          <button onClick={onEditKontak}>Ubah NBP / WA / alias</button>
+          {secretMsg && <span className="pinmsg">{secretMsg}</span>}
         </div>
         <button className="danger" onClick={onLogout}>Logout</button>
         <button className="ghostbtn" onClick={onClose}>Batal</button>

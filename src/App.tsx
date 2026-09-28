@@ -1,15 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { matchFace } from './api';
 import { useAppStore } from './hooks/useAppStore';
 import { AppHeader } from './components/AppHeader';
 import { BottomTabs } from './components/BottomTabs';
-import { ConfirmIdentity } from './components/ConfirmIdentity';
 import { FaceCam } from './components/FaceCam';
+import { KontakSheet } from './components/KontakSheet';
 import { LogoutSheet } from './components/LogoutSheet';
 import { PhotoPreview } from './components/PhotoPreview';
 import { PinSheet } from './components/PinSheet';
 import { Toast } from './components/Toast';
-import { UnknownFace } from './components/UnknownFace';
 import { HariTab } from './tabs/HariTab';
 import { MingguanTab } from './tabs/MingguanTab';
 import { TukarTab } from './tabs/TukarTab';
@@ -19,36 +17,25 @@ import SuperView from './Super';
 export default function App() {
   const store = useAppStore();
   const {
-    tab, setTab, hash, meMember, members, profiling, cam, camMsg, toast,
-    showUnknown, confirmHit, admin, showPin, showLogout,
+    tab, setTab, hash, meMember, members, profiling, cam, toast,
+    admin, showPin, showLogout,
     preview, me, checks, doneCount, navHidden, pending, state, online, bellDot,
   } = store;
 
   const camModal = cam && (
     <FaceCam
+      key={cam.mode}
       title={cam.mode === 'register'
-        ? 'Daftar anggota baru'
+        ? 'Daftar — scan wajah'
         : cam.mode === 'login'
-          ? 'Masuk dengan wajah'
+          ? `Verifikasi wajah${store.pendingLoginName ? ` — ${store.pendingLoginName}` : ''}`
           : `Absen ${store.nama(me)}`}
-      note={camMsg}
-      enroll={cam.mode === 'register'}
-      onShot={(d) => void store.handleDescriptor(d)}
-      onEnroll={(ds) => void store.handleEnroll(ds)}
-      onClose={() => { store.setCam(null); store.setCamMsg(null); }}
-      onRescan={() => store.setCamMsg(null)}
-      onDuplicate={store.handleDuplicate}
-      checkDuplicate={matchFace}
-      onPinLogin={async (pin) => {
-        const r = await store.pinLogin(pin);
-        if (r.ok) {
-          store.setCam(null);
-          store.setCamMsg(null);
-        }
-        return r;
-      }}
+      getChallenge={store.faceChallenge}
+      submit={store.faceSubmit}
+      onClose={() => store.setCam(null)}
     />
   );
+
 
   if (hash === '#super') {
     return (
@@ -64,22 +51,7 @@ export default function App() {
       <div className="phone tac">
         {profiling
           ? <ProfilePage onDone={store.onProfileDone} onCancel={() => store.setProfiling(false)} names={members.map((m) => m.nama)} existing={members.map((m) => ({ nama: m.nama, angkatan: m.angkatan }))} />
-          : <WelcomePage onTap={store.loginCam} onRegister={() => store.setProfiling(true)} onPinLogin={store.pinLogin} />}
-        <AnimatePresence>
-          {showUnknown && (
-            <UnknownFace onRegister={() => { store.setShowUnknown(false); store.setProfiling(true); }} onClose={() => store.setShowUnknown(false)} />
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {confirmHit && (
-            <ConfirmIdentity
-              hit={confirmHit}
-              members={members}
-              onYes={store.confirmLogin}
-              onNo={store.rejectLogin}
-            />
-          )}
-        </AnimatePresence>
+          : <WelcomePage onLogin={store.credLogin} onRegister={() => store.setProfiling(true)} />}
         <AnimatePresence>{camModal}</AnimatePresence>
         <AnimatePresence>
           {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}
@@ -115,14 +87,27 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
+        {/* Akun lama tanpa No. WA wajib lengkapi dulu (hanya saat online). */}
+        {(store.showKontak || (state?.fromApi && !meMember.hasWa)) && (
+          <KontakSheet
+            forced={!meMember.hasWa}
+            onSave={store.saveKontak}
+            onClose={() => store.setShowKontak(false)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {showLogout && (
           <LogoutSheet
             member={meMember}
-            pinNew={store.pinNew}
-            setPinNew={store.setPinNew}
-            pinMsg={store.pinMsg}
-            setPinMsg={store.setPinMsg}
-            onSavePin={store.savePin}
+            secretType={store.secretType}
+            setSecretType={store.setSecretType}
+            secretNew={store.secretNew}
+            setSecretNew={store.setSecretNew}
+            secretMsg={store.secretMsg}
+            setSecretMsg={store.setSecretMsg}
+            onSaveSecret={store.saveSecret}
+            onEditKontak={() => { store.setShowLogout(false); store.setShowKontak(true); }}
             avatarBusy={store.avatarBusy}
             avatarInputRef={store.avatarInputRef}
             onAvatarFile={(f) => void store.onAvatarFile(f)}
@@ -153,10 +138,6 @@ export default function App() {
         <div className="progress"><i style={{ width: `${(doneCount / checks.length) * 100}%` }} /></div>
       )}
       <AnimatePresence>{camModal}</AnimatePresence>
-      <input
-        ref={store.selfieInputRef} type="file" accept="image/*" capture="user" hidden
-        onChange={(e) => { void store.onSelfieAbsen(e.target.files?.[0]); e.target.value = ''; }}
-      />
       <AnimatePresence>
         {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}
       </AnimatePresence>

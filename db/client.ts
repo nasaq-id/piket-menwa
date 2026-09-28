@@ -91,6 +91,12 @@ CREATE TABLE IF NOT EXISTS tugas_master (
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS face_checks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, purpose TEXT NOT NULL,
+  member_id TEXT, ok INTEGER NOT NULL, reason TEXT,
+  live_front REAL, live_turn REAL, turn_front REAL, turn_turn REAL, similarity REAL
+);
+CREATE INDEX IF NOT EXISTS idx_face_checks_at ON face_checks(at);
 `);
 
 // Hapus jalur verifikasi-manual (assessments dkk): satu-satunya sistem nilai
@@ -153,14 +159,35 @@ try {
     sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_pin_unique ON members(pin_hash)');
     console.log('migrasi members +pin_hash ok');
   }
-  if (!mcols.some((c) => c.name === 'no_face_consent')) {
-    sqlite.exec("ALTER TABLE members ADD COLUMN no_face_consent INTEGER NOT NULL DEFAULT 0");
-    console.log('migrasi members +no_face_consent ok');
+  // Jalur akun tanpa wajah (PIN-only + selfie absen) sudah dihapus — wajah wajib.
+  if (mcols.some((c) => c.name === 'no_face_consent')) {
+    sqlite.exec('ALTER TABLE members DROP COLUMN no_face_consent');
+    console.log('migrasi members -no_face_consent ok');
   }
+  // Login pakai identitas (NBP / No. WA) + rahasia (PIN atau password) + wajah.
+  if (!mcols.some((c) => c.name === 'auth_type')) {
+    sqlite.exec("ALTER TABLE members ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'pin'");
+    console.log('migrasi members +auth_type ok');
+  }
+  if (!mcols.some((c) => c.name === 'nbp')) {
+    sqlite.exec('ALTER TABLE members ADD COLUMN nbp TEXT');
+    console.log('migrasi members +nbp ok');
+  }
+  if (!mcols.some((c) => c.name === 'wa')) {
+    sqlite.exec('ALTER TABLE members ADD COLUMN wa TEXT');
+    console.log('migrasi members +wa ok');
+  }
+  sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_members_nbp ON members(nbp) WHERE nbp IS NOT NULL');
+  sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_members_wa ON members(wa) WHERE wa IS NOT NULL');
+  if (!mcols.some((c) => c.name === 'alias')) {
+    sqlite.exec('ALTER TABLE members ADD COLUMN alias TEXT');
+    console.log('migrasi members +alias ok');
+  }
+  sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_members_alias ON members(lower(alias)) WHERE alias IS NOT NULL');
   const acols = sqlite.prepare('PRAGMA table_info(attendance)').all() as { name: string }[];
-  if (!acols.some((c) => c.name === 'selfie_enc')) {
-    sqlite.exec('ALTER TABLE attendance ADD COLUMN selfie_enc TEXT');
-    console.log('migrasi attendance +selfie_enc ok');
+  if (acols.some((c) => c.name === 'selfie_enc')) {
+    sqlite.exec('ALTER TABLE attendance DROP COLUMN selfie_enc');
+    console.log('migrasi attendance -selfie_enc ok');
   }
   const rcols = sqlite.prepare('PRAGMA table_info(roster)').all() as { name: string }[];
   if (!rcols.some((c) => c.name === 'week_start')) {

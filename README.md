@@ -9,13 +9,14 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 ## ✨ Fitur
 
 ### 🔐 Auth & Identitas
-- **Login wajah** — tahan tombol fingerprint 1 detik → face recognition otomatis (anti-spoof: sampel wajib frontal + stabil, threshold + margin).
-- **Login PIN** — tahan 2 detik → form PIN 6 digit (aturan: bukan angka kembar/urutan/tahun angkatan, unik per orang).
-- **Registrasi mandiri** — wizard 4 langkah (Nama → Angkatan → Jabatan → PIN) + scan wajah 3 tahap terpandu (tahan–kanan–kiri) + tolak duplikat wajah & nama+angkatan ganda.
-- **Sesi harian** — login & verifikasi berlaku 1 hari; tiap hari wajib verifikasi wajah ulang.
+- **Login 2 langkah** — (1) NBP / No. WhatsApp / alias + PIN atau password, lalu (2) verifikasi wajah 1:1 terhadap akun itu.
+- **Registrasi mandiri** — wizard: Nama → Alias → NBP (angkatan otomatis dari 2 digit pertama) → Jabatan → No. WA → persetujuan data wajah (UU PDP) → PIN/password, lalu scan wajah. Tolak duplikat wajah, NBP, WA, alias.
+- **Scan wajah challenge-response** — tatap depan, lalu server memberi arah menoleh **acak** (kiri/kanan, berlaku 30 detik, sekali pakai). Foto/layar tidak bisa menoleh sesuai perintah; rekaman video tidak bisa menebak arahnya.
+- **Daftar ulang wajah** — kalau template wajah di-reset/ganti model, login berikutnya (setelah kredensial benar) sekaligus mendaftarkan ulang wajah.
+- **Sesi harian** — login berlaku 1 hari.
 
 ### 🧑‍💼 Piket Harian
-- **Absensi wajah wajib** — hanya face recognition (tidak ada jalur PIN), tercatat jam + kehadiran.
+- **Absensi wajah wajib** — verifikasi wajah BARU saat absen di mako (terpisah dari login), dinilai di server; checklist & bukti baru terbuka setelah absen.
 - **Bukti foto wajib (4 item)** — otomatis terkompres **WebP ≤ 40KB** di HP, dibakar stempel **tanggal + jam + koordinat + logo organisasi**, immutable (tidak bisa ubah/hapus).
 - **Lapsit akhir piket** — catatan + timestamp server + geolocation, terkunci sampai 4 foto lengkap.
 - **Rincian 34 tugas** (5 kategori akordeon) — checklist per shift, tersimpan di server.
@@ -37,8 +38,9 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 | Superadmin (PIN + `#super`) | Dashboard monitoring: pengguna, rekap harian, foto, lapsit, log aktivitas, leaderboard, hapus data |
 
 ### 🔒 Privasi Face Recognition
-- Embedding wajah **dienkripsi AES-256-GCM** at-rest; matching **hanya di server** — client tidak pernah menerima vektor wajah orang lain.
-- Model AI (face-api) di-bundle lokal → jalan offline setelah dibuka sekali.
+- HP hanya memotret; frame dikirim ke server aplikasi sendiri (bukan pihak ketiga), diproses di memori lalu dibuang — **foto wajah tidak disimpan**.
+- Yang disimpan cuma embedding (+ versi model) **terenkripsi AES-256-GCM**; client tidak pernah menerima vektor wajah siapa pun.
+- Setiap verifikasi mencatat **skor** (liveness, arah, similarity, alasan tolak) di tabel `face_checks` — tanpa gambar — untuk kalibrasi dari pemakaian nyata.
 
 ---
 
@@ -48,7 +50,7 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 |---|---|
 | Frontend | React 19 + Vite 8 + TypeScript, framer-motion, lucide-react, zod |
 | PWA | `vite-plugin-pwa` (injectManifest, SW custom `src/sw.ts`: precache + cache foto + web push) |
-| Face AI | face-api.js + model lokal (`public/models`, `public/libs`) |
+| Face AI (server) | [CompreFace](https://github.com/exadel-inc/CompreFace) self-hosted (build Mobilenet: RetinaFace + ArcFace/MobileFaceNet, InsightFace) untuk deteksi + embedding + landmark; anti-spoofing pasif **MiniFASNet** (Silent-Face, Apache-2.0) via `onnxruntime-node`. Lihat `server/face/`, `infra/compreface/`. |
 | Backend | Express 5 (REST JSON), `web-push` (VAPID) |
 | Database | SQLite (`better-sqlite3`) via Drizzle ORM — skema Postgres 1:1 di `db/schema.pg.ts` |
 | Styling | CSS custom, tema Tactical HUD |
@@ -63,10 +65,15 @@ pnpm install
 # 1. Isi .env (lihat tabel di bawah) — minimal FACE_ENC_KEY:
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
-# 2. Seed data awal (template bukti + 34 master tugas)
+# 2. Jalankan CompreFace (Docker, ~1.3 GB RAM, CPU wajib AVX2)
+cd infra/compreface && cp .env.example .env && docker compose up -d && cd ../..
+#    Buka http://localhost:8000 → daftar admin → buat Application → service tipe
+#    DETECTION → salin API key ke .env app: COMPREFACE_DETECT_KEY=...
+
+# 3. Seed data awal (template bukti + 34 master tugas)
 pnpm seed
 
-# 3. Jalan bareng (API :3001 + web :5173)
+# 4. Jalan bareng (API :3001 + web :5173)
 pnpm dev:all
 ```
 
@@ -77,6 +84,8 @@ Buka `http://localhost:5173` (kamera butuh HTTPS di HP — pakai tunnel, mis. `c
 | Key | Wajib | Keterangan |
 |---|---|---|
 | `FACE_ENC_KEY` | Ya | base64 32 byte — enkripsi embedding wajah (jangan masuk git!) |
+| `COMPREFACE_URL` | — | Default `http://127.0.0.1:8000` |
+| `COMPREFACE_DETECT_KEY` | Ya | API key service DETECTION di CompreFace |
 | `ADMIN_PIN` | — | Default `1234` — mode Admin |
 | `SUPER_PIN` | — | Default `041294` — dashboard `#super` |
 | `VAPID_PUBLIC` / `VAPID_PRIVATE` | — | Auto-generate ke `server/.vapid.json` bila kosong |
@@ -137,3 +146,14 @@ Autentikasi aksi sensitif: identitas member dari sesi login; admin pakai header 
 - [ ] Push reminder H-1 otomatis (cron)
 - [ ] Liveness detection anti-foto (blink challenge)
 - [ ] Export rekap PDF/Excel untuk pembina
+
+---
+
+## 🧪 Lab & kalibrasi wajah (dev)
+
+- `http://localhost:5173/face-lab.html` — tes kamera langsung: skor liveness, arah menoleh, similarity ke acuan. Endpoint-nya (`/api/dev/face-analyze`) **tidak ada di production**; hasil tercatat di `face-lab-log.jsonl`.
+- `node --env-file-if-exists=.env scripts/face-check.ts foto1.jpg foto2.jpg` — cek file foto dari terminal.
+- Batas bisa di-tune via env tanpa ubah kode: `FACE_MATCH_MIN` (0.9), `FACE_LIVE_MIN` (0.8), `FACE_MIN_PX` (90), `FACE_FRONTAL_MAX` (0.06), `FACE_TURN_MIN` (0.12).
+- Similarity pakai kalibrasi resmi CompreFace (`(tanh((c0 − jarak) × c1) + 1) / 2`, >0.5 disarankan untuk keamanan tinggi).
+
+> ⚠️ Lisensi: model InsightFace di CompreFace untuk **non-komersial / riset** (dipakai untuk pembelajaran anggota Menwa). Kalau aplikasi dijual/dipakai komersial, urus lisensi model dulu.

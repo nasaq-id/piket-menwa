@@ -1,5 +1,5 @@
 import cors from 'cors';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import express from 'express';
 import fs from 'node:fs';
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
@@ -10,8 +10,12 @@ import { attendance, evidence, faces, lapsit, members, pushSubs, roster, swaps, 
 import {
   attestIssued, settings, tugasMaster,
 } from '../db/schema.sqlite.ts';
-import { encryptJson, decryptJson } from '../db/crypto.ts';
-import { identify as identifyFace, type Enrolled } from '../db/face_match.ts';
+import { detectFaces, similarity } from './face/compreface.ts';
+import { livenessScore } from './face/liveness.ts';
+import { FACE_CFG, bestMatch } from './face/pipeline.ts';
+import { issueChallenge, parseFrames, runChallenge, type ChallengeOutcome, type Purpose } from './face/challenge.ts';
+import { allTemplates, loadTemplate, logCheck, saveTemplate } from './face/templates.ts';
+import { CompreFaceError } from './face/compreface.ts';
 
 const app = express();
 // CORS dibatasi via env saat produksi; dev tetap terbuka.
@@ -204,10 +208,11 @@ app.get('/api/state', (_req, res) => {
   const publicMembers = db.select({
     id: members.id, nama: members.nama, warna: members.warna, divisi: members.divisi,
     foto: members.foto, angkatan: members.angkatan, jabatan: members.jabatan,
-    lastSeen: members.lastSeen, noFaceConsent: members.noFaceConsent,
+    lastSeen: members.lastSeen, wa: members.wa,
   }).from(members).all();
   res.json({
-    members: publicMembers,
+    // WA/NBP = data pribadi → client cuma tahu "sudah isi WA atau belum".
+    members: publicMembers.map(({ wa, ...m }) => ({ ...m, hasWa: wa !== null })),
     roster: db.select().from(roster).all(),
     template: db.select().from(tasks).where(eq(tasks.tanggal, 'template')).all(),
     swaps: db.select().from(swaps).all().sort((a, b) => b.createdAt - a.createdAt),
@@ -307,14 +312,6 @@ app.get('/api/checks', (req, res) => {
   res.json(rows.sort((a, b) => a.sort - b.sort));
 });
 
-app.post('/api/checks/toggle', (req, res) => {
-  const { date, memberId, judul } = req.body as { date: string; memberId: string; judul: string };
-  const row = db.select().from(tasks).where(and(eq(tasks.tanggal, date), eq(tasks.memberId, memberId))).all()
-    .find((t) => t.judul === judul);
-  if (!row) return void res.status(404).json({ error: 'tugas tidak ditemukan' });
-  db.update(tasks).set({ done: row.done ? 0 : 1 }).where(eq(tasks.id, row.id)).run();
-  res.json({ ok: true, done: row.done ? 0 : 1 });
-});
 
 // ---- tukar piket ----
 const memberName = (id: string) =>
@@ -382,6 +379,44 @@ app.post('/api/swaps/:id/cancel', (req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+// ---- Lab wajah (DEV SAJA): kalibrasi liveness/arah/similarity dgn kamera asli.
+// Halaman: /face-lab.html. Tidak didaftarkan sama sekali di production.
+if (!IS_PROD) {
+  app.post('/api/dev/face-analyze', rateLimit(120, 60_000), async (req, res) => {
+    const { image, ref, label } = (req.body ?? {}) as {
+      image?: string; ref?: { calculator: string; embedding: number[] }; label?: string;
+    };
+    const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(image ?? '');
+    if (!m) return void res.status(400).json({ error: 'image harus dataURL' });
+    const buf = Buffer.from(m[2], 'base64');
+    try {
+      const t0 = performance.now();
+      const { faces, calculator } = await detectFaces(buf);
+      // Log hasil (TANPA gambar/embedding) supaya kalibrasi bisa dibaca dari server.
+      const logRow = (row: object) => fs.appendFile('face-lab-log.jsonl',
+        `${JSON.stringify({ at: new Date().toISOString(), label: String(label ?? '-').slice(0, 40), ...row })}\n`, () => {});
+      if (faces.length !== 1) {
+        logRow({ faces: faces.length });
+        return void res.json({ faces: faces.length, cfg: FACE_CFG });
+      }
+      const face = faces[0];
+      const live = await livenessScore(buf, face);
+      const w = face.box.x_max - face.box.x_min;
+      const [e1, e2, nose] = face.landmarks;
+      const out = {
+        faces: 1, calculator, live, width: Math.round(w),
+        turn: (nose[0] - (e1[0] + e2[0]) / 2) / w,
+        similarity: ref && ref.calculator === calculator ? similarity(face.embedding, ref.embedding, calculator) : null,
+        ms: Math.round(performance.now() - t0),
+      };
+      logRow(out);
+      res.json({ ...out, embedding: face.embedding, cfg: FACE_CFG });
+    } catch (e) {
+      res.status(502).json({ error: (e as Error).message });
+    }
+  });
+}
+
 // ---- web push (VAPID). Kunci: env > server/.vapid.json > generate sekali ----
 const VAPID_FILE = './server/.vapid.json';
 let VAPID_PUBLIC = process.env.VAPID_PUBLIC ?? '';
@@ -447,11 +482,6 @@ const PALETTE = ['#a78bfa', '#38bdf8', '#34d399', '#fbbf24', '#f87171', '#f472b6
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'anggota';
 
-const validDescriptors = (descriptors: unknown): descriptors is number[][] =>
-  Array.isArray(descriptors) && descriptors.length >= 1 && descriptors.length <= 3
-  && descriptors.every((d) => Array.isArray(d) && d.length === 128
-    && (d as unknown[]).every((x) => typeof x === 'number' && Number.isFinite(x)));
-
 const saveDataUrl = (dataUrl: string, dest: string): string | null => {
   const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(dataUrl ?? '');
   if (!m) return null;
@@ -473,24 +503,100 @@ const verifyPinHash = (pin: string, stored: string): boolean => {
   const b = Buffer.from(h);
   return a.length === b.length && timingSafeEqual(a, b);
 };
-// Cari member by PIN (hash unik per user, jadi iterasi + verifikasi satu-satu).
+// Cocokkan rahasia (PIN/password) ke hash milik SATU member.
 // Format lama (sha256 tanpa garam, pra-migrasi): cocok → upgrade diam-diam ke scrypt.
 const sha256legacy = (pin: string) => createHash('sha256').update(pin).digest('hex');
-const findByPin = (pin: string) => {
-  for (const m of db.select().from(members).all()) {
-    if (!m.pinHash) continue;
-    if (verifyPinHash(pin, m.pinHash)) return m;
-    if (!m.pinHash.includes('$') && m.pinHash === sha256legacy(pin)) {
-      const upgraded = hashPin(pin);
-      db.update(members).set({ pinHash: upgraded }).where(eq(members.id, m.id)).run();
-      return { ...m, pinHash: upgraded };
-    }
+const checkSecret = (m: typeof members.$inferSelect, secret: string): boolean => {
+  if (!m.pinHash) return false;
+  if (verifyPinHash(secret, m.pinHash)) return true;
+  if (!m.pinHash.includes('$') && m.pinHash === sha256legacy(secret)) {
+    db.update(members).set({ pinHash: hashPin(secret) }).where(eq(members.id, m.id)).run();
+    return true;
   }
-  return undefined;
+  return false;
 };
-const pinTaken = (pin: string, exceptId?: string): boolean => {
-  const m = findByPin(pin);
+
+// ---- identitas login: NBP Menwa (1494.08.148031) atau No. WhatsApp ----
+const NBP_RE = /^\d{4}\.\d{2}\.\d{6}$/;
+// Terima dengan titik (1494.08.148031) atau 12 digit polos (149408148031).
+const normNbp = (v: unknown): string | null => {
+  const t = typeof v === 'string' ? v.trim() : '';
+  if (NBP_RE.test(t)) return t;
+  return /^\d{12}$/.test(t) ? `${t.slice(0, 4)}.${t.slice(4, 6)}.${t.slice(6)}` : null;
+};
+// 08xx / +628xx / 628xx / 8xx → 628xx (10–15 digit total).
+const normWa = (v: unknown): string | null => {
+  let d = (typeof v === 'string' ? v : '').replace(/[\s\-().]/g, '').replace(/^\+/, '');
+  if (d.startsWith('0')) d = `62${d.slice(1)}`;
+  else if (d.startsWith('8')) d = `62${d}`;
+  return /^628\d{7,12}$/.test(d) ? d : null;
+};
+// Alias = nama panggilan untuk login: 3–20 karakter, wajib ada huruf (jadi
+// tidak pernah bentrok dengan NBP/WA yang angka semua), tanpa spasi.
+const ALIAS_RE = /^(?=.*[A-Za-z])[A-Za-z0-9._-]{3,20}$/;
+const normAlias = (v: unknown): string | null => {
+  const t = typeof v === 'string' ? v.trim() : '';
+  return ALIAS_RE.test(t) ? t : null;
+};
+// Angkatan dari 2 digit pertama NBP: 1494.08.148031 → "14" → 2014.
+// Tahun di depan tahun ini dianggap abad lalu (mis. "98" → 1998).
+const angkatanFromNbp = (nbp: string): string => {
+  const yy = Number(nbp.slice(0, 2));
+  const y = 2000 + yy;
+  return String(y > new Date().getFullYear() + 1 ? y - 100 : y);
+};
+
+const findByIdent = (ident: unknown) => {
+  // 12 digit polos bisa NBP atau WA (628xxxxxxxxx) → coba NBP dulu, lalu WA, lalu alias.
+  const nbp = normNbp(ident);
+  const byNbp = nbp ? db.select().from(members).where(eq(members.nbp, nbp)).all()[0] : undefined;
+  if (byNbp) return byNbp;
+  const wa = normWa(ident);
+  const byWa = wa ? db.select().from(members).where(eq(members.wa, wa)).all()[0] : undefined;
+  if (byWa) return byWa;
+  const alias = normAlias(ident);
+  return alias
+    ? db.select().from(members).where(sql`lower(${members.alias}) = ${alias.toLowerCase()}`).all()[0]
+    : undefined;
+};
+const kontakTaken = (field: 'nbp' | 'wa' | 'alias', value: string, exceptId?: string): boolean => {
+  const cond = field === 'alias'
+    ? sql`lower(${members.alias}) = ${value.toLowerCase()}`
+    : eq(members[field], value);
+  const m = db.select({ id: members.id }).from(members).where(cond).all()[0];
   return !!m && m.id !== exceptId;
+};
+
+// Validasi WA (wajib) + alias (wajib) + NBP (opsional) untuk daftar & edit
+// kontak. Angkatan ikut NBP; tanpa NBP → null (terisi saat NBP dilengkapi).
+type Identity = { wa: string; alias: string; nbp: string | null; angkatan: string | null };
+const parseIdentity = (
+  body: { wa?: unknown; alias?: unknown; nbp?: unknown }, exceptId?: string,
+): Identity | { status: number; error: string } => {
+  const wa = normWa(body.wa);
+  if (!wa) return { status: 400, error: 'No. WhatsApp tidak valid (cth: 081234567890)' };
+  if (kontakTaken('wa', wa, exceptId)) return { status: 409, error: 'No. WhatsApp sudah terdaftar' };
+  const alias = normAlias(body.alias);
+  if (!alias) return { status: 400, error: 'Alias 3–20 huruf/angka tanpa spasi, minimal 1 huruf' };
+  if (kontakTaken('alias', alias, exceptId)) return { status: 409, error: 'Alias sudah dipakai' };
+  const nbpRaw = typeof body.nbp === 'string' ? body.nbp.trim() : '';
+  const nbp = nbpRaw ? normNbp(nbpRaw) : null;
+  if (nbpRaw && !nbp) return { status: 400, error: 'Format NBP harus seperti 1494.08.148031' };
+  if (nbp && kontakTaken('nbp', nbp, exceptId)) return { status: 409, error: 'NBP sudah terdaftar' };
+  return { wa, alias, nbp, angkatan: nbp ? angkatanFromNbp(nbp) : null };
+};
+
+type AuthType = 'pin' | 'password';
+const passwordError = (pw: string): string | null => {
+  if (typeof pw !== 'string' || pw.length < 8) return 'Password minimal 8 karakter';
+  if (pw.length > 64) return 'Password maksimal 64 karakter';
+  if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return 'Password wajib gabungan huruf dan angka';
+  return null;
+};
+const secretError = (type: unknown, secret: string, angkatan: string): string | null => {
+  if (type === 'password') return passwordError(secret);
+  if (type === 'pin') return pinError(secret, angkatan, 6);
+  return 'pilih PIN atau password';
 };
 
 // Aturan PIN: minLen digit (default 6; 8 kalau tanpa wajah), bukan angka sama semua, bukan urutan, bukan tahun angkatan.
@@ -507,28 +613,108 @@ const pinError = (pin: string, angkatan: string, minLen = 6): string | null => {
   return null;
 };
 
-app.post('/api/register', (req, res) => {
-  const { nama, angkatan, jabatan, pin, descriptors, noFaceConsent } = (req.body ?? {}) as {
-    nama: string; angkatan: string; jabatan: string; pin: string; descriptors: unknown; noFaceConsent?: boolean;
+// ---- Verifikasi wajah (CompreFace + MiniFASNet, dinilai di SERVER) ----
+// Alur: HP minta challenge (arah acak) → kirim frame depan + frame menoleh →
+// server menilai liveness, arah, dan kecocokan. Frame hanya diproses di memori.
+const faceError = (res: import('express').Response, e: unknown) => {
+  if (e instanceof CompreFaceError) {
+    console.error('layanan wajah:', e.message);
+    return void res.status(503).json({ error: 'Layanan verifikasi wajah sedang tidak tersedia — coba lagi sebentar.' });
+  }
+  throw e;
+};
+
+// Jalankan challenge + catat skornya. `match` (opsional) menghitung
+// similarity ke template dan boleh menolak dengan pesan sendiri.
+const verifyFace = async (
+  body: { challengeId?: unknown; frames?: unknown }, purpose: Purpose, memberId: string | null,
+): Promise<{ ok: true; out: Extract<ChallengeOutcome, { ok: true }> } | { ok: false; status: number; error: string }> => {
+  const frames = parseFrames(body.frames);
+  if (!frames) return { ok: false, status: 400, error: 'Data kamera tidak lengkap — coba lagi.' };
+  const out = await runChallenge(body.challengeId, purpose, memberId, frames);
+  if (!out.ok) {
+    logCheck({ purpose, memberId, ok: false, reason: out.reason, scores: out.scores });
+    return { ok: false, status: 422, error: out.msg };
+  }
+  return { ok: true, out };
+};
+
+// Wajah ini sudah milik anggota lain? (cegah 1 orang punya 2 akun)
+const faceOwner = (frame: Parameters<typeof bestMatch>[0], exceptId?: string) => {
+  let top: { memberId: string; sim: number } | null = null;
+  for (const { memberId, tpl } of allTemplates()) {
+    if (memberId === exceptId) continue;
+    const sim = bestMatch(frame, tpl);
+    if (!top || sim > top.sim) top = { memberId, sim };
+  }
+  return top;
+};
+
+app.post('/api/face/challenge', rateLimit(30, 60_000), (req, res) => {
+  const { purpose, preToken, memberId, attest } = (req.body ?? {}) as {
+    purpose: Purpose; preToken?: string; memberId?: string; attest?: string;
+  };
+  if (purpose === 'register') return void res.json(issueChallenge('register', null));
+  if (purpose === 'login') {
+    const id = checkPrelogin(preToken);
+    if (!id) return void res.status(401).json({ error: 'Sesi login kedaluwarsa — ulangi dari awal.' });
+    return void res.json(issueChallenge('login', id));
+  }
+  if (purpose === 'absen') {
+    // Absen = verifikasi wajah BARU di mako, terpisah dari login.
+    if (!memberId || !checkAttest(attest, memberId, todayLocal())) {
+      return void res.status(403).json({ error: 'Login dulu hari ini.' });
+    }
+    return void res.json(issueChallenge('absen', memberId));
+  }
+  res.status(400).json({ error: 'purpose invalid' });
+});
+
+// Cek ketersediaan WA/NBP di langkah Kontak — biar gagal cepat sebelum scan wajah.
+app.get('/api/register/check', rateLimit(20, 60_000), (req, res) => {
+  const out: { wa?: string; nbp?: string; alias?: string } = {};
+  if (req.query.wa !== undefined) {
+    const wa = normWa(req.query.wa);
+    out.wa = !wa ? 'invalid' : kontakTaken('wa', wa) ? 'taken' : 'ok';
+  }
+  if (req.query.nbp) {
+    const nbp = normNbp(req.query.nbp);
+    out.nbp = !nbp ? 'invalid' : kontakTaken('nbp', nbp) ? 'taken' : 'ok';
+  }
+  if (req.query.alias !== undefined) {
+    const alias = normAlias(req.query.alias);
+    out.alias = !alias ? 'invalid' : kontakTaken('alias', alias) ? 'taken' : 'ok';
+  }
+  res.json(out);
+});
+
+app.post('/api/register', rateLimit(10, 60_000), async (req, res) => {
+  const { nama, jabatan, authType, secret } = (req.body ?? {}) as {
+    nama: string; jabatan: string; authType: AuthType; secret: string;
   };
   const clean = (nama ?? '').trim().replace(/\s+/g, ' ').slice(0, 30);
   if (clean.length < 5) return void res.status(400).json({ error: 'nama minimal 5 huruf' });
-  const year = (angkatan ?? '').trim();
-  const yNum = Number(year);
-  if (!/^\d{4}$/.test(year) || yNum < 2000 || yNum > new Date().getFullYear() + 1) {
-    return void res.status(400).json({ error: 'angkatan harus tahun 4 digit yang wajar' });
-  }
   const jab = (jabatan ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
   if (jab.length < 2) return void res.status(400).json({ error: 'jabatan minimal 2 huruf' });
-  const noFace = noFaceConsent === true;
-  // Tanpa consent wajah: PIN wajib LEBIH PANJANG (8 digit) karena jadi
-  // satu-satunya faktor otentikasi akun (tidak ada verifikasi wajah cadangan).
-  const pinErr = pinError(pin, year, noFace ? 8 : 6);
-  if (pinErr) return void res.status(400).json({ error: pinErr });
-  if (pinTaken(pin)) {
-    return void res.status(400).json({ error: 'PIN sudah dipakai' });
+  const ident = parseIdentity(req.body ?? {});
+  if ('error' in ident) return void res.status(ident.status).json({ error: ident.error });
+  const secErr = secretError(authType, secret, ident.angkatan ?? '');
+  if (secErr) return void res.status(400).json({ error: secErr });
+  // Wajah WAJIB: dipakai verifikasi login + absensi piket.
+  let face;
+  try {
+    face = await verifyFace(req.body ?? {}, 'register', null);
+  } catch (e) {
+    return faceError(res, e);
   }
-  if (!noFace && !validDescriptors(descriptors)) return void res.status(400).json({ error: 'wajah invalid (burst dulu)' });
+  if (!face.ok) return void res.status(face.status).json({ error: face.error });
+  const { front, turn, scores } = face.out;
+  const owner = faceOwner(front);
+  if (owner && owner.sim >= FACE_CFG.matchMin) {
+    logCheck({ purpose: 'register', memberId: null, ok: false, reason: 'duplicate', scores, similarity: owner.sim });
+    const who = db.select({ nama: members.nama }).from(members).where(eq(members.id, owner.memberId)).all()[0];
+    return void res.status(409).json({ error: `Wajah ini sudah terdaftar${who ? ` sebagai ${who.nama}` : ''} — silakan login.` });
+  }
   let id = slugify(clean);
   for (let n = 2; db.select().from(members).where(eq(members.id, id)).all()[0]; n++) id = `${slugify(clean)}-${n}`;
   // TIDAK ADA foto wajah disimpan — cuma embedding (dienkripsi di bawah).
@@ -537,10 +723,13 @@ app.post('/api/register', (req, res) => {
   const count = db.select().from(members).all().length;
   db.insert(members).values({
     id, nama: clean, warna: PALETTE[count % PALETTE.length], divisi: 'acara',
-    foto: null, angkatan: year, jabatan: jab, pinHash: hashPin(pin), noFaceConsent: noFace ? 1 : 0,
+    foto: null, jabatan: jab, pinHash: hashPin(secret), authType, ...ident,
   }).run();
-  if (!noFace) db.insert(faces).values({ memberId: id, descriptors: encryptJson(descriptors), updatedAt: Date.now() }).run();
-  res.json({ ok: true, memberId: id, nama: clean });
+  saveTemplate(id, [front, turn]);
+  logCheck({ purpose: 'register', memberId: id, ok: true, scores, similarity: owner?.sim ?? null });
+  // Wajah baru saja dipindai saat daftar → langsung dapat atestasi hari ini.
+  const tanggal = todayLocal();
+  res.json({ ok: true, memberId: id, nama: clean, attest: issueAttest(id, tanggal), tanggal });
 });
 
 // Foto profil OPSIONAL (avatar tampilan), terpisah total dari data biometrik
@@ -565,28 +754,95 @@ app.put('/api/members/:id/foto', (req, res) => {
   res.json({ ok: true, foto: url });
 });
 
-// ---- PIN login (alternatif wajah; absensi/check-in TETAP wajah) ----
-app.post('/api/login/pin', rateLimit(10, 60_000), (req, res) => {
-  const { pin } = (req.body ?? {}) as { pin: string };
-  if (!/^\d{6,}$/.test(pin ?? '')) return void res.status(400).json({ error: 'PIN minimal 6 digit' });
-  const m = findByPin(pin);
-  if (!m) return void res.status(401).json({ error: 'PIN salah' });
-  // PIN benar = bukti identitas yg cukup utk token atestasi hari ini.
-  const tanggal = todayLocal();
-  const attest = issueAttest(m.id, tanggal);
-  res.json({ ok: true, memberId: m.id, nama: m.nama, attest, tanggal });
+// ---- Login 2 langkah: (1) NBP/WA + PIN/password → (2) wajah milik akun itu ----
+// Token pra-login: bukti langkah 1 lolos, berlaku 5 menit, hanya bisa ditukar
+// jadi atestasi lewat verifikasi wajah 1:1 terhadap member yang sama.
+const PRELOGIN_TTL = 5 * 60_000;
+const preloginSig = (memberId: string, exp: number) =>
+  createHmac('sha256', SIGN_KEY).update(`prelogin:${memberId}:${exp}`).digest('hex');
+const issuePrelogin = (memberId: string) => {
+  const exp = Date.now() + PRELOGIN_TTL;
+  return `${memberId}.${exp}.${preloginSig(memberId, exp)}`;
+};
+const checkPrelogin = (token: unknown): string | null => {
+  if (typeof token !== 'string') return null;
+  const [memberId, expS, sig] = token.split('.');
+  const exp = Number(expS);
+  if (!memberId || !sig || !Number.isFinite(exp) || exp < Date.now()) return null;
+  const good = preloginSig(memberId, exp);
+  if (sig.length !== good.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
+  return memberId;
+};
+
+app.post('/api/login/credential', rateLimit(10, 60_000), (req, res) => {
+  const { ident, secret } = (req.body ?? {}) as { ident: string; secret: string };
+  const m = findByIdent(ident);
+  // Pesan sama untuk identitas & rahasia salah — jangan bocorkan mana yang terdaftar.
+  if (!m || typeof secret !== 'string' || !checkSecret(m, secret)) {
+    return void res.status(401).json({ error: 'NBP/No. WA/alias atau PIN/password salah' });
+  }
+  // Belum punya template wajah (di-reset admin / ganti model) → langkah wajah
+  // berikutnya sekaligus mendaftarkan ulang wajah.
+  res.json({ ok: true, memberId: m.id, nama: m.nama, preToken: issuePrelogin(m.id), needEnroll: !loadTemplate(m.id) });
 });
 
-// Atur/ganti PIN sendiri (sudah login = sudah verifikasi wajah).
-app.post('/api/pin/set', (req, res) => {
-  const { memberId, pin } = (req.body ?? {}) as { memberId: string; pin: string };
+app.post('/api/login/face', rateLimit(20, 60_000), async (req, res) => {
+  const { preToken } = (req.body ?? {}) as { preToken: string };
+  const memberId = checkPrelogin(preToken);
+  if (!memberId) return void res.status(401).json({ error: 'Sesi login kedaluwarsa — ulangi dari awal.' });
+  let face;
+  try {
+    face = await verifyFace(req.body ?? {}, 'login', memberId);
+  } catch (e) {
+    return faceError(res, e);
+  }
+  if (!face.ok) return void res.status(face.status).json({ error: face.error });
+  const { front, turn, scores } = face.out;
+  const tpl = loadTemplate(memberId);
+  if (tpl) {
+    // Verifikasi 1:1 — cuma dibandingkan ke wajah milik akun yang login.
+    const sim = bestMatch(front, tpl);
+    logCheck({ purpose: 'login', memberId, ok: sim >= FACE_CFG.matchMin, reason: sim >= FACE_CFG.matchMin ? null : 'no_match', scores, similarity: sim });
+    if (sim < FACE_CFG.matchMin) return void res.status(401).json({ error: 'Wajah tidak cocok dengan akun ini — coba lagi.' });
+  } else {
+    // Daftar ulang wajah (kredensial sudah terbukti di langkah 1).
+    const owner = faceOwner(front, memberId);
+    if (owner && owner.sim >= FACE_CFG.matchMin) {
+      logCheck({ purpose: 'login', memberId, ok: false, reason: 'duplicate', scores, similarity: owner.sim });
+      return void res.status(409).json({ error: 'Wajah ini sudah terdaftar di akun lain — hubungi admin.' });
+    }
+    saveTemplate(memberId, [front, turn]);
+    logCheck({ purpose: 'login', memberId, ok: true, reason: 'enrolled', scores });
+  }
+  const m = db.select().from(members).where(eq(members.id, memberId)).all()[0];
+  const tanggal = todayLocal();
+  res.json({ ok: true, memberId, nama: m?.nama ?? memberId, attest: issueAttest(memberId, tanggal), tanggal, enrolled: !tpl });
+});
+
+// Ganti PIN/password sendiri — wajib atestasi wajah hari ini.
+app.post('/api/secret/set', (req, res) => {
+  const { memberId, authType, secret, attest } = (req.body ?? {}) as {
+    memberId: string; authType: AuthType; secret: string; attest: string;
+  };
+  if (!checkAttest(attest, memberId, todayLocal())) return void res.status(403).json({ error: 'verifikasi wajah dulu' });
   const member = db.select().from(members).where(eq(members.id, memberId)).all()[0];
   if (!member) return void res.status(400).json({ error: 'anggota invalid' });
-  const err = pinError(pin, member.angkatan ?? '', member.noFaceConsent ? 8 : 6);
+  const err = secretError(authType, secret, member.angkatan ?? '');
   if (err) return void res.status(400).json({ error: err });
-  const taken = pinTaken(pin, memberId);
-  if (taken) return void res.status(400).json({ error: 'PIN sudah dipakai' });
-  db.update(members).set({ pinHash: hashPin(pin) }).where(eq(members.id, memberId)).run();
+  db.update(members).set({ pinHash: hashPin(secret), authType }).where(eq(members.id, memberId)).run();
+  res.json({ ok: true });
+});
+
+// Isi/ubah No. WA + alias + NBP sendiri (anggota lama wajib isi sekali) — wajib atestasi.
+app.put('/api/members/:id/kontak', (req, res) => {
+  const { id } = req.params;
+  const { attest } = (req.body ?? {}) as { attest: string };
+  if (!checkAttest(attest, id, todayLocal())) return void res.status(403).json({ error: 'verifikasi wajah dulu' });
+  const ident = parseIdentity(req.body ?? {}, id);
+  if ('error' in ident) return void res.status(ident.status).json({ error: ident.error });
+  // NBP kosong → angkatan lama (pilihan manual dulu) dipertahankan.
+  const { angkatan, ...rest } = ident;
+  db.update(members).set(angkatan ? ident : rest).where(eq(members.id, id)).run();
   res.json({ ok: true });
 });
 
@@ -617,32 +873,6 @@ app.delete('/api/members/:id', (req, res) => {
   } catch { /* best effort */ }
   res.json({ ok: true });
 });
-// Endpoint publik LAMA (GET /api/faces) DIHAPUS — dulu mengekspos raw
-// embedding SEMUA anggota ke siapa pun tanpa auth, dan matching dilakukan di
-// browser (bisa dimanipulasi). Sekarang: matching cuma lewat endpoint ini,
-// descriptor tidak pernah keluar dari server.
-app.post('/api/faces/match', rateLimit(30, 60_000), (req, res) => {
-  const { descriptor } = (req.body ?? {}) as { descriptor: unknown };
-  if (!Array.isArray(descriptor) || descriptor.length !== 128
-    || !descriptor.every((x) => typeof x === 'number' && Number.isFinite(x))) {
-    return void res.status(400).json({ error: 'descriptor invalid' });
-  }
-  const rows = db.select().from(faces).all();
-  const enrolled: Enrolled[] = [];
-  for (const r of rows) {
-    try {
-      enrolled.push({ memberId: r.memberId, descriptors: decryptJson<number[][]>(r.descriptors) });
-    } catch (e) {
-      console.warn(`face row ${r.memberId} gagal didekripsi (key salah / data korup), dilewati:`, (e as Error).message);
-    }
-  }
-  const hit = identifyFace(descriptor as number[], enrolled);
-  if (!hit) return void res.json({ hit: null });
-  // Match lolos → terbitkan token atestasi hari ini (dipakai absen/evidence/lapsit).
-  const tanggal = todayLocal();
-  const attest = issueAttest(hit.memberId, tanggal);
-  res.json({ hit, attest, tanggal });
-});
 
 // Admin-only: jumlah wajah terdaftar per anggota (buat dashboard), TANPA
 // pernah mengirim vektor embedding-nya ke client.
@@ -650,29 +880,11 @@ app.get('/api/faces/summary', requireAdmin, (_req, res) => {
   const rows = db.select().from(faces).all();
   res.json(rows.map((r) => ({
     memberId: r.memberId,
-    count: decryptJson<number[][]>(r.descriptors).length,
+    count: loadTemplate(r.memberId)?.embeddings.length ?? 0, // 0 = format lama, perlu daftar ulang
     updatedAt: r.updatedAt,
   })));
 });
 
-app.post('/api/faces', requireAdmin, (req, res) => {
-  const { memberId, descriptors } = (req.body ?? {}) as { memberId: string; descriptors: unknown };
-  const member = db.select().from(members).where(eq(members.id, memberId)).all()[0];
-  if (!member) return void res.status(400).json({ error: 'anggota invalid' });
-  const valid = Array.isArray(descriptors) && descriptors.length >= 1 && descriptors.length <= 3
-    && descriptors.every((d) => Array.isArray(d) && d.length === 128
-      && (d as unknown[]).every((x) => typeof x === 'number' && Number.isFinite(x)));
-  if (!valid) return void res.status(400).json({ error: 'descriptors invalid (1-3 x 128 angka)' });
-  const enc = encryptJson(descriptors);
-  const existing = db.select().from(faces).where(eq(faces.memberId, memberId)).all()[0];
-  if (existing) {
-    db.update(faces).set({ descriptors: enc, updatedAt: Date.now() })
-      .where(eq(faces.memberId, memberId)).run();
-  } else {
-    db.insert(faces).values({ memberId, descriptors: enc, updatedAt: Date.now() }).run();
-  }
-  res.json({ ok: true });
-});
 
 app.delete('/api/faces/:memberId', requireAdmin, (req, res) => {
   db.delete(faces).where(eq(faces.memberId, req.params.memberId)).run();
@@ -731,47 +943,36 @@ const jamSelesaiAt = (tanggal: string, memberId: string): string | null => {
   return baseRow?.jamSelesai ?? null;
 };
 
-app.post('/api/attendance', (req, res) => {
-  const { tanggal, memberId, selfie, attest } = (req.body ?? {}) as { tanggal: string; memberId: string; selfie?: string; attest?: string };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal ?? '')) return void res.status(400).json({ error: 'tanggal invalid' });
+app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
+  const { tanggal, memberId, attest } = (req.body ?? {}) as { tanggal: string; memberId: string; attest?: string };
+  if (tanggal !== todayLocal()) return void res.status(400).json({ error: 'absen hanya untuk hari ini' });
   const member = db.select().from(members).where(eq(members.id, memberId)).all()[0];
   if (!member) return void res.status(400).json({ error: 'anggota invalid' });
   if (!onDutyAt(tanggal, memberId)) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
-  // Bukti identitas: token atestasi wajah/PIN hari ini — kecuali akun
-  // PIN-only yg wajib menyertakan selfie terenkripsi sebagai pengganti.
-  const selfieOk = member.noFaceConsent && selfie && /^data:image\/webp;base64,/.test(selfie);
-  if (!checkAttest(attest, memberId, tanggal) && !selfieOk) {
-    return void res.status(403).json({ error: 'verifikasi wajah dulu hari ini' });
+  if (!checkAttest(attest, memberId, tanggal)) return void res.status(403).json({ error: 'Login dulu hari ini.' });
+  // Bukti hadir = verifikasi wajah BARU saat absen (bukan sisa login pagi).
+  let face;
+  try {
+    face = await verifyFace(req.body ?? {}, 'absen', memberId);
+  } catch (e) {
+    return faceError(res, e);
   }
+  if (!face.ok) return void res.status(face.status).json({ error: face.error });
+  const tpl = loadTemplate(memberId);
+  const sim = tpl ? bestMatch(face.out.front, tpl) : 0;
+  const matched = sim >= FACE_CFG.matchMin;
+  logCheck({ purpose: 'absen', memberId, ok: matched, reason: matched ? null : 'no_match', scores: face.out.scores, similarity: sim });
+  if (!matched) return void res.status(401).json({ error: `Wajah tidak cocok dengan ${member.nama} — absen harus oleh orangnya langsung.` });
   const already = db.select().from(attendance).all()
     .some((r) => r.tanggal === tanggal && r.memberId === memberId);
   if (already) return void res.json({ ok: true, already: true });
-  // Member yang menolak scan wajah (PIN-only) WAJIB selfie sbg bukti hadir
-  // pengganti face-match. Selfie dienkripsi AES-256-GCM at rest — dipakai
-  // sebagai bukti rekap admin, BUKAN utk matching algoritma apa pun.
-  if (member.noFaceConsent) {
-    if (!selfie || !/^data:image\/webp;base64,/.test(selfie)) {
-      return void res.status(400).json({ error: 'selfie wajib untuk akun tanpa wajah (PIN-only)' });
-    }
-  }
   const now = new Date();
   const jam = `${String(now.getHours()).padStart(2, '0')}.${String(now.getMinutes()).padStart(2, '0')}`;
-  const selfieEnc = member.noFaceConsent && selfie ? encryptJson(selfie) : null;
-  db.insert(attendance).values({ tanggal, memberId, jam, createdAt: Date.now(), selfieEnc }).run();
+  db.insert(attendance).values({ tanggal, memberId, jam, createdAt: Date.now() }).run();
   res.json({ ok: true, jam });
 });
 
 // Selfie absen (terenkripsi) — HANYA admin/superadmin boleh minta lihat.
-app.get('/api/attendance/:id/selfie', requireAdmin, (req, res) => {
-  const row = db.select().from(attendance).where(eq(attendance.id, Number(req.params.id))).all()[0];
-  if (!row?.selfieEnc) return void res.status(404).json({ error: 'tidak ada selfie' });
-  try {
-    const dataUrl = decryptJson<string>(row.selfieEnc);
-    res.json({ selfie: dataUrl });
-  } catch {
-    res.status(500).json({ error: 'gagal dekripsi' });
-  }
-});
 
 // ---- bukti per tugas PER ORANG (tiap anggota upload fotonya sendiri) ----
 // Privasi: user biasa hanya bisa lihat foto miliknya sendiri (memberId wajib

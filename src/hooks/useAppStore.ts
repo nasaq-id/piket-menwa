@@ -2,16 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
   dropPush, ensurePush, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
-  loadNilaiToday, matchFace,
-  loadLapsit, loadState, loadWeekRoster, localChecks, loginPin, markAttendance, ping,
-  registerMember, saveRosterRemote, saveWeekRosterRemote, setLoginPin, setProfilePhoto, submitLapsit,
+  loadNilaiToday, requestChallenge,
+  loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginFace, markAttendance, ping,
+  registerMember, saveRosterRemote, saveWeekRosterRemote, setKontak, setLoginSecret, setProfilePhoto, submitLapsit,
   toggleBreakdown, uploadEvidence, verifyPin,
-  type AppState, type AttRow, type EvidenceRow, type FaceSummary, type LapsitRow,
+  type AppState, type AttRow, type AuthType, type EvidenceRow, type FaceSummary, type LapsitRow,
   type Member, type SwapRow, type TaskRow,
 } from '../api';
 import { getGeo, compressPhoto, stampPhoto, type Geo } from '../bukti';
-import { ensureModels, ting, warmAudio } from '../face';
-import { profileSchema, type Profile } from '../Welcome';
+import { ting } from '../face';
+import { angkatanFromNbp, profileSchema, type Profile } from '../Welcome';
 import { DAYS, dateStr, load, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
 
 export type Tab = 'hari' | 'minggu' | 'tukar';
@@ -49,8 +49,10 @@ export function useAppStore() {
   const [faces, setFaces] = useState<FaceSummary[]>([]);
   const [att, setAtt] = useState<AttRow[]>([]);
   const [unlocked, setUnlocked] = useState(false); // wajah terverifikasi sesi ini
+  // Kamera scan wajah: daftar, langkah 2 login (NBP/WA/alias + PIN), atau absen piket.
   const [cam, setCam] = useState<null | { mode: 'absen' | 'login' | 'register' }>(null);
-  const [camMsg, setCamMsg] = useState<string | null>(null);
+  // Hasil langkah 1 login (kredensial lolos) — menunggu verifikasi wajah.
+  const [pendingLogin, setPendingLogin] = useState<{ preToken: string; memberId: string; nama: string; needEnroll: boolean } | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [me, setMe] = useState(() => {
     // Sesi hanya berlaku 1 hari → tiap hari wajib verifikasi wajah ulang.
@@ -61,23 +63,16 @@ export function useAppStore() {
       return '';
     }
   });
-  const [regName, setRegName] = useState('');
-  const [regAngkatan, setRegAngkatan] = useState('');
-  const [regJabatan, setRegJabatan] = useState('');
-  const [regPin, setRegPin] = useState('');
+  const [regProfile, setRegProfile] = useState<Profile | null>(null);
   const [profiling, setProfiling] = useState(false);
-  const [showUnknown, setShowUnknown] = useState(false);
-  // Hasil identifikasi wajah yang MENUNGGU KONFIRMASI USER sebelum benar-benar
-  // login — mencegah kasus salah-kenali (2 wajah mirip di kamera murah) yang
-  // langsung login-kan orang ke akun orang lain tanpa sempat dicek.
-  const [confirmHit, setConfirmHit] = useState<{ memberId: string; ambiguous: boolean } | null>(null);
   const [navHidden, setNavHidden] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
-  const [pinNew, setPinNew] = useState('');
-  const [pinMsg, setPinMsg] = useState<string | null>(null);
+  const [secretType, setSecretType] = useState<AuthType>('pin');
+  const [secretNew, setSecretNew] = useState('');
+  const [secretMsg, setSecretMsg] = useState<string | null>(null);
+  const [showKontak, setShowKontak] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
-  const selfieInputRef = useRef<HTMLInputElement>(null);
 
   // Foto profil OPSIONAL (avatar) — file dipilih manual dari galeri/kamera,
   // BUKAN dari proses scan wajah biometrik. Dikompres dulu spy hemat data.
@@ -108,23 +103,43 @@ export function useAppStore() {
     if (res.ok) { await refresh(); setToast({ msg: 'Foto profil dihapus', kind: 'ok' }); }
   };
 
-  const pinLogin = async (pin: string) => {
-    const r = await loginPin(pin);
-    if (r.ok && r.memberId) {
-      setMe(r.memberId);
-      setToast({ msg: `Login berhasil — selamat datang, ${r.nama}`, kind: 'ok' });
-      void ensurePush(r.memberId);
-      try { sessionStorage.setItem(unlockKey(r.memberId), dateStr(0)); } catch { /* abaikan */ }
-      setUnlocked(true);
-    }
-    return r;
+  // Login langkah 1: NBP/WA + PIN/password → buka kamera verifikasi wajah.
+  const credLogin = async (ident: string, secret: string) => {
+    if (!state?.fromApi) return { ok: false, error: 'Butuh online untuk masuk.' };
+    const r = await loginCredential(ident, secret);
+    if (!r.ok) return r;
+    setPendingLogin(r.data);
+    setCam({ mode: 'login' });
+    return { ok: true };
   };
 
-  const savePin = async () => {
+  // Login selesai (kredensial + wajah). Checklist TIDAK otomatis terbuka —
+  // itu hanya lewat absen (verifikasi wajah baru di mako), kecuali sesi ini
+  // sudah absen sebelumnya.
+  const enterAs = (memberId: string, namaV: string) => {
+    setMe(memberId);
+    setUnlocked(sessionStorage.getItem(unlockKey(memberId)) === dateStr(0));
+    ting(990, 0.18);
+    setToast({ msg: `Login berhasil — selamat datang, ${namaV}`, kind: 'ok' });
+    void ensurePush(memberId);
+  };
+
+  const saveSecret = async () => {
     if (!me) return;
-    const r = await setLoginPin(me, pinNew);
-    setPinMsg(r.ok ? 'PIN tersimpan ✓' : (r.error ?? 'Gagal simpan.'));
-    if (r.ok) setPinNew('');
+    const r = await setLoginSecret(me, dateStr(0), secretType, secretNew);
+    setSecretMsg(r.ok ? `${secretType === 'pin' ? 'PIN' : 'Password'} tersimpan ✓` : r.error);
+    if (r.ok) setSecretNew('');
+  };
+
+  const saveKontak = async (k: { wa: string; alias: string; nbp: string }) => {
+    if (!me) return { ok: false, error: 'belum login' };
+    const r = await setKontak(me, dateStr(0), k);
+    if (r.ok) {
+      await refresh();
+      setShowKontak(false);
+      setToast({ msg: 'Data login tersimpan — berikutnya login pakai NBP/WA/alias', kind: 'ok' });
+    }
+    return r;
   };
   const [hash, setHash] = useState(() => location.hash);
   const [, setTitleTaps] = useState(0);
@@ -167,10 +182,6 @@ export function useAppStore() {
     window.addEventListener('online', on);
     window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
-  useEffect(() => {
-    // Panaskan model wajah sejak app dibuka → pas tap login sudah siap.
-    ensureModels().catch(() => {});
   }, []);
   useEffect(() => {
     if (!toast) return;
@@ -495,47 +506,7 @@ export function useAppStore() {
     if (!crew.includes(me)) {
       return alert('Kamu tidak ada jadwal hari ini — minta Admin susun roster dulu (tab Mingguan, mode Admin).');
     }
-    if (meMember.noFaceConsent) {
-      // Akun PIN-only: absen via selfie+watermark (bukan face-match).
-      selfieInputRef.current?.click();
-      return;
-    }
-    warmAudio();
-    setCamMsg(null);
     setCam({ mode: 'absen' });
-  };
-
-  const onSelfieAbsen = async (f: File | undefined) => {
-    if (!f || !meMember) return;
-    setAvatarBusy(true);
-    try {
-      const g = (await getGeo()) ?? geo;
-      if (g) setGeo(g);
-      const dataUrl = await stampPhoto(f, g, 1280, meMember.nama);
-      const res = await markAttendance(dateStr(0), me, dataUrl);
-      if (!res.ok) {
-        setToast({ msg: res.error ?? 'Gagal absen.', kind: 'error' });
-        return;
-      }
-      const a = await loadAttendance(dateStr(0), dateStr(0));
-      if (a) setAtt(a);
-      setUnlocked(true);
-      try { sessionStorage.setItem(unlockKey(me), dateStr(0)); } catch { /* abaikan */ }
-      ting(990, 0.18);
-      setToast({ msg: 'Absen berhasil — checklist & bukti terbuka', kind: 'ok' });
-      void ensurePush(me);
-    } catch {
-      setToast({ msg: 'Baca/kompres foto gagal.', kind: 'error' });
-    } finally {
-      setAvatarBusy(false);
-    }
-  };
-
-  const loginCam = () => {
-    if (!state?.fromApi) return alert('Butuh online untuk masuk.');
-    warmAudio();
-    setCamMsg(null);
-    setCam({ mode: 'login' }); // selalu kamera dulu; wajah baru → form nama+angkatan
   };
 
   const logout = () => {
@@ -548,152 +519,67 @@ export function useAppStore() {
   };
 
   const onProfileDone = (p: Profile) => {
-    setRegName(p.nama);
-    setRegAngkatan(p.angkatan);
-    setRegJabatan(p.jabatan);
-    setRegPin(p.pin);
+    setRegProfile(p);
     setProfiling(false);
-    if (!p.consentWajah) {
-      // Menolak scan wajah → daftar langsung tanpa kamera, PIN jadi satu-satunya kunci.
-      void finishRegister(p.nama, p.angkatan, p.jabatan, p.pin, [], true);
-      return;
-    }
-    warmAudio();
-    setCamMsg('Tap Mulai, ikuti tahap: tahan – kanan – kiri');
     setCam({ mode: 'register' });
   };
 
-  const finishRegister = async (
-    namaV: string, angkatanV: string, jabatanV: string, pinV: string, ds: number[][], noFaceConsent: boolean,
-  ) => {
-    const res = await registerMember(namaV, angkatanV, jabatanV, pinV, ds, noFaceConsent);
-    if (res.ok && res.memberId) {
-      const hello = `${namaV} (${jabatanV}, angkatan ${angkatanV})`;
-      await refresh();
-      setMe(res.memberId);
-      setUnlocked(!noFaceConsent); // PIN-only: tidak ada verifikasi wajah, tetap terkunci sampai login PIN eksplisit
-      if (!noFaceConsent) {
-        try { sessionStorage.setItem(unlockKey(res.memberId), dateStr(0)); } catch { /* abaikan */ }
+  // ---- Scan wajah: tiap mode punya cara minta challenge & kirim frame ----
+  const faceChallenge = () => {
+    if (cam?.mode === 'login') return requestChallenge('login', { preToken: pendingLogin?.preToken });
+    if (cam?.mode === 'absen') return requestChallenge('absen', { memberId: me });
+    return requestChallenge('register');
+  };
+
+  const faceSubmit = async (challengeId: string, frames: string[]): Promise<{ ok: boolean; error?: string }> => {
+    if (cam?.mode === 'login') {
+      if (!pendingLogin) return { ok: false, error: 'Sesi login hilang — ulangi dari awal.' };
+      const r = await loginFace(pendingLogin.preToken, challengeId, frames);
+      if (!r.ok) {
+        if (/kedaluwarsa/.test(r.error)) {
+          setPendingLogin(null);
+          setCam(null);
+          setToast({ msg: r.error, kind: 'error' });
+        }
+        return r;
       }
-      if (res.memberId) void ensurePush(res.memberId);
+      setPendingLogin(null);
+      setCam(null);
+      enterAs(r.data.memberId, r.data.nama);
+      if (r.data.enrolled) setToast({ msg: 'Wajah terdaftar ulang — selamat datang!', kind: 'ok' });
       void getGeo().then(setGeo);
-      setRegName('');
-      setRegAngkatan('');
-      setRegJabatan('');
-      setRegPin('');
-      setProfiling(false);
+      return { ok: true };
+    }
+    if (cam?.mode === 'absen') {
+      const r = await markAttendance(dateStr(0), me, challengeId, frames);
+      if (!r.ok) return r;
+      const a = await loadAttendance(dateStr(0), dateStr(0));
+      if (a) setAtt(a);
+      setUnlocked(true);
+      try { sessionStorage.setItem(unlockKey(me), dateStr(0)); } catch { /* abaikan */ }
       setCam(null);
-      setCamMsg(null);
-      alert('Pendaftaran berhasil — kamu masuk sebagai ' + hello);
-    } else {
-      setCamMsg(res.error ?? 'Gagal daftar.');
-      setToast({ msg: res.error ?? 'Gagal daftar.', kind: 'error' });
+      setToast({ msg: 'Absen berhasil — checklist & bukti terbuka', kind: 'ok' });
+      void ensurePush(me);
+      void getGeo().then(setGeo); // siapkan koordinat untuk stempel foto
+      return { ok: true };
     }
-  };
-
-  // Duplikat ketahuan di tahap 1 → tolak cepat tanpa menunggu 3 tahap.
-  const handleDuplicate = (memberId: string) => {
-    const msg = `Wajah ini sudah terdaftar sebagai ${nama(memberId)} — pakai Masuk, jangan daftar lagi.`;
-    setCamMsg(msg);
-    setToast({ msg, kind: 'error' });
-  };
-
-  const handleEnroll = async (ds: number[][]) => {
-    const parsed = profileSchema.safeParse({ nama: regName, angkatan: regAngkatan, jabatan: regJabatan, pin: regPin });
-    if (!parsed.success) {
-      setCamMsg(parsed.error.issues[0]?.message ?? 'Profil invalid.');
-      return;
-    }
-    // Tolak wajah yang sudah terdaftar (nama beda pun tetap ketahuan) — cek
-    // di SERVER, bukan bandingkan array embedding di browser.
-    for (const d of ds) {
-      const dupe = await matchFace(d);
-      if (dupe) {
-        const msg = `Wajah ini sudah terdaftar sebagai ${nama(dupe.memberId)} — pakai Masuk, jangan daftar lagi.`;
-        setCamMsg(msg);
-        setToast({ msg, kind: 'error' });
-        return;
-      }
-    }
-    const res = await registerMember(parsed.data.nama, parsed.data.angkatan, parsed.data.jabatan, parsed.data.pin, ds);
-    if (res.ok && res.memberId) {
-      const hello = `${parsed.data.nama} (${parsed.data.jabatan}, angkatan ${parsed.data.angkatan})`;
-      await refresh();
-      setMe(res.memberId);
-      setUnlocked(true); // wajah baru saja diverifikasi → langsung terbuka
-      try { sessionStorage.setItem(unlockKey(res.memberId), dateStr(0)); } catch { /* abaikan */ }
-      if (res.memberId) void ensurePush(res.memberId);
-      void getGeo().then(setGeo);
-      setRegName('');
-      setRegAngkatan('');
-      setRegJabatan('');
-      setRegPin('');
-      setProfiling(false);
-      setCam(null);
-      setCamMsg(null);
-      alert('Pendaftaran berhasil — kamu masuk sebagai ' + hello);
-    } else {
-      setCamMsg(res.error ?? 'Gagal daftar.');
-    }
-  };
-
-  const handleDescriptor = async (d: number[]) => {
-    if (!cam) return;
-    if (cam.mode === 'login') {
-      const hit = await matchFace(d);
-      if (!hit) {
-        setCam(null);
-        setCamMsg(null);
-        setShowUnknown(true); // wajah baru → suruh daftar dulu
-        return;
-      }
-      // Selalu minta konfirmasi visual eksplisit sebelum benar-benar login —
-      // wajah dari kamera murah/cahaya kurang bisa mirip antar 2 orang beda,
-      // jadi jangan langsung percaya hasil algoritma tanpa user cek foto.
-      setCam(null);
-      setCamMsg(null);
-      setConfirmHit({ memberId: hit.memberId, ambiguous: !!hit.ambiguous });
-      return;
-    }
-    if (cam.mode !== 'absen') return;
-    const hit = await matchFace(d);
-    if (!hit) {
-      setCamMsg('Wajah tidak dikenal — Daftar dulu ya.');
-      return;
-    }
-    if (hit.memberId !== me || hit.ambiguous) {
-      setCamMsg(`Terdeteksi ${nama(hit.memberId)}${hit.ambiguous ? ' (kurang yakin)' : ''}, bukan ${nama(me)} — keluar lalu masuk lagi, atau coba lagi dengan pencahayaan lebih baik.`);
-      return;
-    }
-    await markAttendance(dateStr(0), me);
-    const a = await loadAttendance(dateStr(0), dateStr(0));
-    if (a) setAtt(a);
-    setUnlocked(true);
-    try { sessionStorage.setItem(unlockKey(me), dateStr(0)); } catch { /* abaikan */ }
-    ting(990, 0.18); // absen lolos
-    setToast({ msg: 'Absen berhasil — checklist & bukti terbuka', kind: 'ok' });
-    void ensurePush(me);
-    void getGeo().then(setGeo); // siapkan koordinat untuk stempel foto
+    // register
+    const parsed = profileSchema.safeParse(regProfile);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Profil invalid.' };
+    const res = await registerMember(parsed.data, challengeId, frames);
+    if (!res.ok || !res.memberId) return { ok: false, error: res.error ?? 'Gagal daftar.' };
+    const angk = angkatanFromNbp(parsed.data.nbp);
+    await refresh();
+    setMe(res.memberId);
+    void ensurePush(res.memberId);
+    void getGeo().then(setGeo);
+    setRegProfile(null);
     setCam(null);
-    setCamMsg(null);
-  };
-
-  // Konfirmasi identitas hasil pindaian wajah sebelum login benar-benar
-  // dieksekusi — user melihat foto+nama match lalu tegas menyatakan
-  // "ini saya" atau menolaknya (mencegah insiden salah-login akun orang lain).
-  const confirmLogin = () => {
-    if (!confirmHit) return;
-    const hit = confirmHit;
-    setConfirmHit(null);
-    setMe(hit.memberId);
-    setUnlocked(sessionStorage.getItem(unlockKey(hit.memberId)) === dateStr(0));
-    ting(990, 0.18); // masuk
-    setToast({ msg: `Login berhasil — selamat datang, ${nama(hit.memberId)}`, kind: 'ok' });
-    void ensurePush(hit.memberId);
-  };
-  const rejectLogin = () => {
-    setConfirmHit(null);
-    setShowUnknown(true); // "bukan saya" → tawarkan daftar / coba lagi
+    setToast({
+      msg: `Pendaftaran berhasil — masuk sebagai ${parsed.data.nama} (${parsed.data.jabatan}${angk ? `, angkatan ${angk}` : ''})`,
+      kind: 'ok',
+    });
+    return { ok: true };
   };
 
   const submitSwap = async () => {
@@ -901,9 +787,9 @@ export function useAppStore() {
     today, tmr, crew, crewBesok, jamHari, jamSelesaiHariIni, lapsitOpenAt, lapsitOpen,
     doneCount, pending, incoming, outgoing, othersPending, approvedSwaps, swappedDays,
     bellDot, ABBR, weekDates, rangeLabel, putarRotasi, dayDate, mySlots,
-    taskTap, onFile, pickPhoto, toggleBd, kirimLapsit, needVerify, onSelfieAbsen,
-    loginCam, logout, onProfileDone, finishRegister, handleDuplicate, handleEnroll,
-    handleDescriptor, confirmLogin, rejectLogin, confirmHit,
+    taskTap, onFile, pickPhoto, toggleBd, kirimLapsit, needVerify,
+    logout, onProfileDone, credLogin, faceChallenge, faceSubmit,
+    pendingLoginName: pendingLogin?.nama ?? null,
     submitSwap, decide, cancelSwap, addTo, removeFrom, jamColon, setJam,
     moveWeekMember, saveWeekDrag, resetWeekDrag, clearWeekOverride,
     gearClick, submitPin, enableNotif, titleTap, hash,
@@ -911,10 +797,11 @@ export function useAppStore() {
     target, setTarget, fromDay, setFromDay, toDay, setToDay, alasan, setAlasan,
     weekOff, setWeekOff, weekStat, expanded, setExpanded, pickDay, setPickDay,
     weekLoading, dragSchedule, dragDirty, dragSaving, weekOverridden,
-    me, setMe, faces, att, unlocked, cam, setCam, camMsg, setCamMsg,
-    toast, setToast, profiling, setProfiling, showUnknown, setShowUnknown,
-    navHidden, showLogout, setShowLogout, pinNew, setPinNew, pinMsg, setPinMsg, savePin,
-    avatarBusy, avatarInputRef, selfieInputRef, onAvatarFile, removeAvatar, pinLogin,
+    me, setMe, faces, att, unlocked, cam, setCam,
+    toast, setToast, profiling, setProfiling,
+    navHidden, showLogout, setShowLogout, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, saveSecret,
+    showKontak, setShowKontak, saveKontak,
+    avatarBusy, avatarInputRef, onAvatarFile, removeAvatar,
     lapsit, lapsitText, setLapsitText, bdOpen, setBdOpen, buktiOpen, setBuktiOpen,
     bdDone, bdSecOpen, setBdSecOpen, nilaiHariIni,
   };

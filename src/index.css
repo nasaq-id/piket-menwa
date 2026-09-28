@@ -473,3 +473,16 @@ button:active { transform:scale(.97); }
 .tac .dedit .x, .tac .facerow button, .tac .supdel, .tac .addbtn { border-radius:2px; font-family:inherit; }
 .tac .wbtn.ghost, .tac .wlink { color:#4ade80; }
 .tac .wlogo { border-color:rgba(74,222,128,.4); }
+
+/* Login NBP/WA + PIN/password, pilihan PIN vs password */
+.loginform { display:flex; flex-direction:column; gap:10px; width:100%; margin-top:14px; }
+.loginform .wbtn { margin-top:6px; }
+.segrow { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.segrow .jabcard { justify-content:center; }
+
+/* Scan wajah challenge-response: panah arah menoleh di atas pratinjau */
+.camstage { position:relative; }
+.turncue { position:absolute; top:calc(50% - 32px); display:grid; place-items:center; width:64px; height:64px; border-radius:50%; background:rgba(74,222,128,.9); color:#04120a; box-shadow:0 0 18px rgba(74,222,128,.6); pointer-events:none; }
+.turncue.kiri { left:10px; }
+.turncue.kanan { right:10px; }
+.camcard .hint.turnmsg { color:#4ade80; font-size:16px; font-weight:700; text-align:center; }

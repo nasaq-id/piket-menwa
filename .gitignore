@@ -30,3 +30,8 @@ server/.vapid.json
 *.njsproj
 *.sln
 *.sw?
+
+# log kalibrasi lab wajah (dev)
+face-lab-log.jsonl
+# contoh env tanpa rahasia boleh masuk git
+!.env.example

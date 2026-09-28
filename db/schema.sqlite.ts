@@ -1,6 +1,6 @@
 // Skema SQLite (dev lokal). Kolom & tipe dibuat portabel agar 1:1 bisa
 // dimigrasi ke PostgreSQL/Supabase — lihat db/schema.pg.ts untuk padanannya.
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const members = sqliteTable('members', {
   id: text('id').primaryKey(),
@@ -11,8 +11,11 @@ export const members = sqliteTable('members', {
   angkatan: text('angkatan'), // tahun menwa, misal 2023
   jabatan: text('jabatan'), // jabatan di kompi
   lastSeen: integer('last_seen'), // heartbeat presence (epoch ms)
-  pinHash: text('pin_hash'), // SHA-256 PIN login (unik)
-  noFaceConsent: integer('no_face_consent').notNull().default(0), // 1 = menolak scan wajah saat daftar (PIN-only, absen diinput manual admin)
+  pinHash: text('pin_hash'), // scrypt hash rahasia login (PIN atau password, lihat authType)
+  authType: text('auth_type').notNull().default('pin'), // 'pin' | 'password' — dipilih anggota saat daftar
+  nbp: text('nbp'), // Nomor Buku Pokok Menwa, format 1494.08.148031 (unik, opsional)
+  wa: text('wa'), // No. WhatsApp ternormalisasi 628xxx (unik) — identitas login cadangan bila NBP kosong
+  alias: text('alias'), // nama panggilan, unik tanpa beda huruf besar/kecil — identitas login ketiga
 });
 
 export const roster = sqliteTable('roster', {
@@ -142,11 +145,6 @@ export const attendance = sqliteTable('attendance', {
     .references(() => members.id),
   jam: text('jam').notNull(), // HH.MM
   createdAt: integer('created_at').notNull(),
-  // Selfie absen (HANYA untuk member noFaceConsent=1, pengganti face-match).
-  // Ciphertext AES-256-GCM (foto sudah di-watermark nama+jam+logo di client
-  // SEBELUM dienkripsi) — dipakai sebagai bukti rekap, BUKAN utk matching
-  // algoritma apa pun. Hanya admin/superadmin yang bisa minta didekripsi.
-  selfieEnc: text('selfie_enc'),
 });
 
 // ---- Penilaian otomatis: master bobot tugas (dipakai validasi foto + seed) ----
@@ -163,4 +161,20 @@ export const tugasMaster = sqliteTable('tugas_master', {
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
+});
+
+// Log skor setiap verifikasi wajah (TANPA gambar/embedding) — bahan kalibrasi
+// batas liveness/similarity dari pemakaian nyata & investigasi kasus.
+export const faceChecks = sqliteTable('face_checks', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  at: integer('at').notNull(),
+  purpose: text('purpose').notNull(), // register | login | absen
+  memberId: text('member_id'), // NULL saat daftar (akun belum ada)
+  ok: integer('ok').notNull(),
+  reason: text('reason'), // alasan tolak, NULL kalau lolos
+  liveFront: real('live_front'),
+  liveTurn: real('live_turn'),
+  turnFront: real('turn_front'),
+  turnTurn: real('turn_turn'),
+  similarity: real('similarity'), // ke template terdaftar (login/absen) atau duplikat tertinggi (daftar)
 });

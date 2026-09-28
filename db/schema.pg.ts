@@ -2,7 +2,7 @@
 // Tabel & kolom identik dengan db/schema.sqlite.ts; hanya tipe dialect yang beda.
 // Migrasi: drizzle-kit generate --config=drizzle.pg.config.ts lalu migrate ke Supabase.
 // Kode server & frontend tidak perlu berubah selain ganti import schema + client.
-import { integer, pgTable, text } from 'drizzle-orm/pg-core';
+import { bigint, doublePrecision, integer, pgTable, text } from 'drizzle-orm/pg-core';
 
 export const members = pgTable('members', {
   id: text('id').primaryKey(),
@@ -14,7 +14,10 @@ export const members = pgTable('members', {
   jabatan: text('jabatan'),
   lastSeen: integer('last_seen'),
   pinHash: text('pin_hash'),
-  noFaceConsent: integer('no_face_consent').notNull().default(0),
+  authType: text('auth_type').notNull().default('pin'),
+  nbp: text('nbp').unique(),
+  wa: text('wa').unique(),
+  alias: text('alias'), // unik via index lower(alias)
 });
 
 export const roster = pgTable('roster', {
@@ -122,7 +125,6 @@ export const attendance = pgTable('attendance', {
     .references(() => members.id),
   jam: text('jam').notNull(),
   createdAt: integer('created_at').notNull(),
-  selfieEnc: text('selfie_enc'),
 });
 
 export const tugasMaster = pgTable('tugas_master', {
@@ -140,4 +142,18 @@ export const tugasMaster = pgTable('tugas_master', {
 export const settings = pgTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
+});
+
+export const faceChecks = pgTable('face_checks', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  at: bigint('at', { mode: 'number' }).notNull(),
+  purpose: text('purpose').notNull(),
+  memberId: text('member_id'),
+  ok: integer('ok').notNull(),
+  reason: text('reason'),
+  liveFront: doublePrecision('live_front'),
+  liveTurn: doublePrecision('live_turn'),
+  turnFront: doublePrecision('turn_front'),
+  turnTurn: doublePrecision('turn_turn'),
+  similarity: doublePrecision('similarity'),
 });

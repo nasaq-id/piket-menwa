@@ -4,7 +4,7 @@ import {
   dateStr, load, save, type DayKey,
 } from './piket';
 
-export interface Member { id: string; nama: string; warna: string; divisi: string; foto: string | null; angkatan: string | null; jabatan: string | null; lastSeen: number | null; noFaceConsent: number }
+export interface Member { id: string; nama: string; warna: string; divisi: string; foto: string | null; angkatan: string | null; jabatan: string | null; lastSeen: number | null; hasWa: boolean }
 export interface TaskRow { id: number; tanggal: string; judul: string; done: number; sort: number }
 export interface SwapRow {
   id: string; requester: string; target: string;
@@ -51,25 +51,6 @@ async function post(url: string, body?: unknown): Promise<boolean> {
     return r.ok;
   } catch {
     return false;
-  }
-}
-
-// Sama seperti post(), tapi parse & kembalikan body JSON hasilnya (dipakai
-// endpoint yang balikin data, misal hasil match wajah).
-async function postJson<T>(url: string, body?: unknown): Promise<T | null> {
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(getPin() ? { 'x-admin-pin': getPin() as string } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!r.ok) return null;
-    return (await r.json()) as T;
-  } catch {
-    return null;
   }
 }
 
@@ -225,17 +206,6 @@ export function localChecks(date = dateStr(0)): TaskRow[] {
   }));
 }
 
-export async function toggleCheckRemote(date: string, memberId: string, judul: string): Promise<boolean> {
-  return post('/api/checks/toggle', { date, memberId, judul });
-}
-
-export function toggleCheckLocal(date: string, judul: string) {
-  const all = load<Record<string, string[]>>('piket-checks', {});
-  const cur = all[date] ?? [];
-  all[date] = cur.includes(judul) ? cur.filter((t) => t !== judul) : [...cur, judul];
-  save('piket-checks', all);
-}
-
 export async function createSwapRemote(s: Omit<SwapRow, 'id' | 'status' | 'createdAt'>): Promise<boolean> {
   return post('/api/swaps', s);
 }
@@ -362,39 +332,18 @@ export const clearAttest = () => {
   } catch { /* abaikan */ }
 };
 
-// Cocokkan 1 descriptor (hasil scan kamera device sendiri) ke server —
-// server yang simpan & bandingkan SEMUA embedding, client cuma terima hasil
-// {memberId, ambiguous}, tidak pernah menerima vektor member lain.
-export async function matchFace(descriptor: number[]): Promise<{ memberId: string; ambiguous?: boolean } | null> {
-  const r = await postJson<{
-    hit: { memberId: string; distance: number; ambiguous?: boolean } | null;
-    attest?: string; tanggal?: string;
-  }>(
-    '/api/faces/match', { descriptor },
+// ---- Verifikasi wajah di server (challenge-response) ----
+// HP hanya memotret; server (CompreFace + anti-spoofing) yang menilai.
+export type FaceAction = 'kiri' | 'kanan';
+export type FacePurpose = 'register' | 'login' | 'absen';
+export async function requestChallenge(
+  purpose: FacePurpose, extra: { preToken?: string; memberId?: string } = {},
+): Promise<{ ok: true; challengeId: string; action: FaceAction } | { ok: false; error: string }> {
+  const attest = extra.memberId ? getAttest(extra.memberId, dateStr(0)) : undefined;
+  const r = await postResult<{ challengeId: string; action: FaceAction }>(
+    '/api/face/challenge', { purpose, ...extra, attest }, 'gagal memulai scan',
   );
-  if (r?.hit) {
-    if (r.attest && r.tanggal) saveAttest(r.hit.memberId, r.tanggal, r.attest);
-    return r.hit;
-  }
-  return null;
-}
-
-export async function saveFaces(
-  memberId: string, descriptors: number[][],
-): Promise<{ ok: boolean; forbidden?: boolean }> {
-  try {
-    const r = await fetch('/api/faces', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(getPin() ? { 'x-admin-pin': getPin() as string } : {}),
-      },
-      body: JSON.stringify({ memberId, descriptors }),
-    });
-    return r.ok ? { ok: true } : { ok: false, forbidden: r.status === 403 };
-  } catch {
-    return { ok: false };
-  }
+  return r.ok ? { ok: true, ...r.data } : r;
 }
 
 export interface AttRow {
@@ -405,18 +354,13 @@ export async function loadAttendance(from: string, to: string): Promise<AttRow[]
   return get<AttRow[]>(`/api/attendance?from=${from}&to=${to}`);
 }
 
-export async function markAttendance(tanggal: string, memberId: string, selfie?: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const r = await fetch('/api/attendance', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tanggal, memberId, selfie, attest: getAttest(memberId, tanggal) }),
-    });
-    const j = (await r.json()) as { error?: string };
-    return r.ok ? { ok: true } : { ok: false, error: j.error ?? 'gagal absen' };
-  } catch {
-    return { ok: false, error: 'offline — butuh online untuk absen' };
-  }
+export async function markAttendance(
+  tanggal: string, memberId: string, challengeId: string, frames: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  const r = await postResult<{ ok: true }>(
+    '/api/attendance', { tanggal, memberId, attest: getAttest(memberId, tanggal), challengeId, frames }, 'gagal absen',
+  );
+  return r.ok ? { ok: true } : r;
 }
 
 // Heartbeat presence (fire-and-forget, tanpa PIN).
@@ -432,25 +376,39 @@ export function ping(memberId: string) {
 export const isOnline = (m: { lastSeen: number | null }) =>
   !!m.lastSeen && Date.now() - m.lastSeen < 90000;
 
-// ---- pendaftaran mandiri (wajah + nama + angkatan + jabatan + PIN), tanpa login ----
-// CATATAN PRIVASI: TIDAK ADA parameter foto lagi — cuma embedding wajah yang
-// dikirim (server enkripsi & simpan sebagai vektor, bukan gambar). Kalau mau
-// avatar profil, upload TERPISAH lewat setProfilePhoto() setelah login.
-// Kalau consentWajah=false: descriptors dikirim [] (tidak dipakai server).
+// ---- pendaftaran mandiri (profil + WA/NBP + PIN/password + wajah), tanpa login ----
+// CATATAN PRIVASI: frame kamera hanya diproses sesaat di server (diubah jadi
+// embedding terenkripsi), gambarnya TIDAK disimpan. Avatar profil terpisah
+// lewat setProfilePhoto() setelah login.
+export type AuthType = 'pin' | 'password';
+export interface RegisterInput {
+  nama: string; alias: string; nbp: string; jabatan: string;
+  wa: string; authType: AuthType; secret: string;
+}
 export async function registerMember(
-  nama: string, angkatan: string, jabatan: string, pin: string, descriptors: number[][], noFaceConsent = false,
+  p: RegisterInput, challengeId: string, frames: string[],
 ): Promise<{ ok: boolean; memberId?: string; error?: string }> {
   try {
     const r = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nama, angkatan, jabatan, pin, descriptors, noFaceConsent }),
+      body: JSON.stringify({ ...p, challengeId, frames }),
     });
-    const j = (await r.json()) as { memberId?: string; error?: string };
+    const j = (await r.json()) as { memberId?: string; attest?: string; tanggal?: string; error?: string };
+    if (r.ok && j.memberId && j.attest && j.tanggal) saveAttest(j.memberId, j.tanggal, j.attest);
     return r.ok ? { ok: true, memberId: j.memberId } : { ok: false, error: j.error ?? 'gagal' };
   } catch {
     return { ok: false, error: 'offline — butuh online untuk daftar' };
   }
+}
+
+export type KontakStatus = 'ok' | 'invalid' | 'taken';
+// Cek ketersediaan per field — cuma field yang diisi yang dikirim.
+export async function checkKontak(
+  f: { wa?: string; nbp?: string; alias?: string },
+): Promise<{ wa?: KontakStatus; nbp?: KontakStatus; alias?: KontakStatus } | null> {
+  const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v) as [string, string][]);
+  return get(`/api/register/check?${q}`);
 }
 
 // Foto profil OPSIONAL (avatar tampilan) — beda total dari data biometrik
@@ -469,31 +427,53 @@ export async function setProfilePhoto(memberId: string, dataUrl: string): Promis
   }
 }
 
-// ---- login PIN (alternatif wajah) ----
-export async function loginPin(pin: string): Promise<{ ok: boolean; memberId?: string; nama?: string; error?: string }> {
+// ---- login 2 langkah: NBP/WA + PIN/password → verifikasi wajah akun itu ----
+async function postResult<T>(url: string, body: unknown, fallback: string): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   try {
-    const r = await fetch('/api/login/pin', {
+    const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify(body),
     });
-    const j = (await r.json()) as { memberId?: string; nama?: string; attest?: string; tanggal?: string; error?: string };
-    if (r.ok && j.memberId && j.attest && j.tanggal) saveAttest(j.memberId, j.tanggal, j.attest);
-    return r.ok ? { ok: true, memberId: j.memberId, nama: j.nama } : { ok: false, error: j.error ?? 'gagal' };
+    const j = (await r.json()) as T & { error?: string };
+    return r.ok ? { ok: true, data: j } : { ok: false, error: j.error ?? fallback };
   } catch {
-    return { ok: false, error: 'offline — butuh online untuk masuk' };
+    return { ok: false, error: 'offline — butuh online' };
   }
 }
 
-export async function setLoginPin(memberId: string, pin: string): Promise<{ ok: boolean; error?: string }> {
+export async function loginCredential(ident: string, secret: string) {
+  return postResult<{ memberId: string; nama: string; preToken: string; needEnroll: boolean }>(
+    '/api/login/credential', { ident, secret }, 'gagal masuk',
+  );
+}
+
+export async function loginFace(preToken: string, challengeId: string, frames: string[]) {
+  const r = await postResult<{ memberId: string; nama: string; attest: string; tanggal: string; enrolled: boolean }>(
+    '/api/login/face', { preToken, challengeId, frames }, 'verifikasi wajah gagal',
+  );
+  if (r.ok) saveAttest(r.data.memberId, r.data.tanggal, r.data.attest);
+  return r;
+}
+
+// Ganti PIN/password & kontak: server minta token atestasi wajah hari ini.
+export async function setLoginSecret(memberId: string, tanggal: string, authType: AuthType, secret: string) {
+  return postResult<{ ok: true }>(
+    '/api/secret/set', { memberId, authType, secret, attest: getAttest(memberId, tanggal) }, 'gagal simpan',
+  );
+}
+
+export async function setKontak(
+  memberId: string, tanggal: string, k: { wa: string; alias: string; nbp: string },
+): Promise<{ ok: boolean; error?: string }> {
   try {
-    const r = await fetch('/api/pin/set', {
-      method: 'POST',
+    const r = await fetch(`/api/members/${encodeURIComponent(memberId)}/kontak`, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ memberId, pin }),
+      body: JSON.stringify({ ...k, attest: getAttest(memberId, tanggal) }),
     });
     const j = (await r.json()) as { error?: string };
-    return r.ok ? { ok: true } : { ok: false, error: j.error ?? 'gagal' };
+    return r.ok ? { ok: true } : { ok: false, error: j.error ?? 'gagal simpan' };
   } catch {
     return { ok: false, error: 'offline' };
   }
@@ -594,29 +574,4 @@ export async function toggleBreakdown(tanggal: string, memberId: string, itemKey
 export async function loadNilaiToday(date: string, memberId: string): Promise<number | null> {
   const r = await getAuthed<{ nilai: number }>(`/api/nilai/today?date=${date}&memberId=${encodeURIComponent(memberId)}`);
   return r?.nilai ?? null;
-}
-
-export interface LeaderboardRow { memberId: string; nama: string; n: number; rata2: number | null }
-export async function loadLeaderboard(from: string, to: string): Promise<LeaderboardRow[]> {
-  const r = await getAuthed<{ rows: LeaderboardRow[] }>(`/api/nilai/leaderboard?from=${from}&to=${to}`);
-  return r?.rows ?? [];
-}
-
-// Kompres foto dari kamera sebelum kirim (hemat kuota & disk).
-export function compressImage(file: File, maxDim = 1280, quality = 0.75): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * scale);
-      c.height = Math.round(img.height * scale);
-      c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('baca foto gagal')); };
-    img.src = url;
-  });
 }
