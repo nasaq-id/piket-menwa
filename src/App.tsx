@@ -119,6 +119,7 @@ export default function App() {
             onAvatarFile={(f) => void store.onAvatarFile(f)}
             onRemoveAvatar={() => void store.removeAvatar()}
             onLogout={store.logout}
+            ask={store.ask}
             onClose={() => store.setShowLogout(false)}
           />
         )}

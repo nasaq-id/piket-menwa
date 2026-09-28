@@ -1,5 +1,5 @@
-import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { motion, useDragControls } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { AliasField, NbpField, WaField, identitySchema } from '../Welcome';
 import { Button } from './Button';
 import { ShakeErr } from './Motion';
@@ -16,6 +16,14 @@ export function KontakSheet({ forced, onSave, onClose }: {
   const [nbp, setNbp] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Drag-untuk-tutup hanya dari kepala sheet supaya tidak bentrok dgn scroll isi.
+  const controls = useDragControls();
+  useEffect(() => {
+    if (forced) return;
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [forced, onClose]);
   const submit = async () => {
     const v = identitySchema.safeParse({ wa, alias, nbp });
     if (!v.success) return setErr(v.error.issues[0]?.message ?? 'Isian belum valid.');
@@ -32,11 +40,19 @@ export function KontakSheet({ forced, onSave, onClose }: {
       transition={{ duration: 0.2 }}
     >
       <motion.div
-        className="sheet" onClick={(e) => e.stopPropagation()}
+        className="sheet" role="dialog" aria-modal="true" aria-label={forced ? 'Lengkapi data login' : 'Ubah NBP / No. WA / alias'}
+        onClick={(e) => e.stopPropagation()}
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'tween', duration: 0.28, ease: 'easeOut' }}
+        drag="y" dragListener={false} dragControls={controls}
+        dragConstraints={{ top: 0, bottom: 0 }} dragElastic={forced ? 0 : 0.25}
+        onDragEnd={(_, info) => {
+          if (!forced && (info.offset.y > 90 || info.velocity.y > 500)) onClose();
+        }}
       >
-        <i className="grabber" />
+        <div className="sheethead" onPointerDown={(e) => controls.start(e)}>
+          <i className="grabber" />
+        </div>
         <b>{forced ? 'Lengkapi data login' : 'Ubah NBP / No. WA / alias'}</b>
         {forced && (
           <span className="hint">
