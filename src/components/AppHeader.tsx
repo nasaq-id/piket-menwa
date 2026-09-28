@@ -21,7 +21,7 @@ export function AppHeader({ tab, membersCount, offline, admin, bellDot, onTitleT
             {avatar}
           </button>
         )}
-        <button type="button" className="hdtitle" onClick={onTitleTap} aria-label="Judul aplikasi">
+        <button type="button" className="hdtitle" onClick={onTitleTap}>
           <h1>{tabTitle[tab]}</h1>
           <p>Ki Menwa YPKP • {membersCount} anggota{offline ? ' • Offline' : ''}</p>
         </button>

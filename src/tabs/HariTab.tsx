@@ -185,12 +185,6 @@ export function HariTab({ store }: { store: AppStore }) {
                           key={c.judul}
                           className={unlocked ? '' : 'locked'}
                           onClick={() => taskTap(c)}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`${c.judul}${ph ? ' — foto terkirim' : ' — ketuk untuk ambil foto'}`}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); taskTap(c); }
-                          }}
                         >
                           <button
                             className="cam"
@@ -206,7 +200,15 @@ export function HariTab({ store }: { store: AppStore }) {
                               ? <img src={ph.file} alt={c.judul} />
                               : busy ? <span className="spin" /> : <Camera size={17} />}
                           </button>
-                          <span className={`ttitle ${c.done ? 'strike' : ''}`}>{c.judul}</span>
+                          <button
+                            type="button"
+                            className={`ttitle ${c.done ? 'strike' : ''}`}
+                            style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+                            onClick={(e) => { e.stopPropagation(); taskTap(c); }}
+                            aria-label={`${c.judul}${ph ? ' — foto terkirim' : ' — ketuk untuk ambil foto'}`}
+                          >
+                            {c.judul}
+                          </button>
                           <span className={`box ${c.done ? 'on' : ''}`}>{c.done ? <Check size={13} /> : ''}</span>
                         </li>
                       );
