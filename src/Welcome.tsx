@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { checkKontak, type AuthType } from './api';
 import { Button } from './components/Button';
 import { ShakeErr, TAP } from './components/Motion';
+import { useTypingPlaceholder } from './hooks/useTypingPlaceholder';
 
 export const JABATAN_LIST = [
   'Danki',
@@ -137,6 +138,9 @@ export function SecretField({ label, authType, onAuthType, value, onChange, onEn
 // Dua jalur login lewat logo (pilihan tidak ditampilkan langsung):
 //   ketuk 1× → form manual (NBP / No. WA / alias + PIN/password)
 //   ketuk 2× → kamera langsung scan wajah (server mengenali pemiliknya).
+// Contoh dummy untuk placeholder login (BUKAN data nyata), tampil bergantian.
+const LOGIN_CONTOH = ['1494.08.100001', '081234567890', 'rajawali'];
+const LOGIN_STATIS = 'NBP, No. WA, atau alias';
 export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   onLogin: (ident: string, secret: string) => Promise<{ ok: boolean; error?: string }>;
   onFaceLogin: () => void; onRegister: () => void;
@@ -150,6 +154,22 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Tanpa animasi gerak: placeholder login statis.
+  const [kurangiGerak, setKurangiGerak] = useState(
+    () => typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const ubah = () => setKurangiGerak(mq.matches);
+    mq.addEventListener('change', ubah);
+    return () => mq.removeEventListener('change', ubah);
+  }, []);
+  // Placeholder mengetik satu contoh bergantian (tanpa awalan "contoh:"),
+  // berhenti saat field sudah berisi — sama gaya dengan field nama wizard.
+  const loginAnim = useTypingPlaceholder(LOGIN_CONTOH, showForm && ident === '' && !kurangiGerak);
   // Riak sentuh logo: umpan balik langsung saat pointerdown (framer-motion).
   // Logika bedakan 1×/2× tetap lewat onLogoTap + jeda TAP_WINDOW.
   const [ping, setPing] = useState(0);
@@ -238,10 +258,10 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
           onSubmit={(e) => { e.preventDefault(); void submit(); }}
         >
           <label className="wfield">
-            <span>NBP / No. WhatsApp / Alias</span>
+            <span>NBP / No. WA / Alias</span>
             <input
               autoFocus autoComplete="username" inputMode="text" autoCapitalize="none"
-              placeholder="1494.08.148031, 0812…, atau alias" value={ident}
+              placeholder={kurangiGerak ? LOGIN_STATIS : `${loginAnim}▌`} value={ident}
               onChange={(e) => { setIdent(e.target.value.slice(0, 20)); setErr(null); }}
             />
           </label>
@@ -394,41 +414,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
   // Teks lengkap persetujuan dibuka lewat "Selengkapnya" (framer-motion height).
   const [consentMore, setConsentMore] = useState(false);
   // Placeholder animasi dari nama pendaftar beneran (bukan hardcode).
-  const [phAnim, setPhAnim] = useState('');
-  const namesKey = names.join('|');
-  useEffect(() => {
-    if (nama || names.length === 0) return;
-    const EXAMPLES = names;
-    let li = 0;
-    let ci = 0;
-    let del = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const word = EXAMPLES[li % EXAMPLES.length];
-      if (!del) {
-        ci += 1;
-        setPhAnim(word.slice(0, ci));
-        if (ci >= word.length) {
-          del = true;
-          timer = setTimeout(tick, 1200);
-          return;
-        }
-        timer = setTimeout(tick, 90);
-      } else {
-        ci -= 1;
-        setPhAnim(word.slice(0, ci));
-        if (ci <= 0) {
-          del = false;
-          li += 1;
-          timer = setTimeout(tick, 400);
-          return;
-        }
-        timer = setTimeout(tick, 40);
-      }
-    };
-    timer = setTimeout(tick, 500);
-    return () => clearTimeout(timer);
-  }, [nama, namesKey]);
+  const phAnim = useTypingPlaceholder(names, nama === '');
 
   const jab = jabPreset === '__custom' ? jabCustom : jabPreset;
   const shown = scanning ? STEP_LABELS.length - 1 : step;
