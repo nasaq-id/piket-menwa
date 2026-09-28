@@ -5,6 +5,7 @@ import { ABSEN_BUKA_MENIT, ABSEN_TELAT_MENIT, dateStr, geserJam } from '../piket
 import { isOnline } from '../api';
 import type { AppStore } from '../hooks/useAppStore';
 import { TAP } from '../components/Motion';
+import { Button } from '../components/Button';
 
 const fmtTanggal = new Intl.DateTimeFormat('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
 const todayLong = () => {
@@ -19,7 +20,7 @@ export function HariTab({ store }: { store: AppStore }) {
     pendingTugas, onFile, bdDone, bdOpen, setBdOpen, bdSecOpen, setBdSecOpen,
     nilaiHariIni, lapsit, lapsitText, setLapsitText, kirimLapsit, lapsitOpen,
     lapsitOpenAt, jamSelesaiHariIni, tmr, crewBesok, state, setPreview,
-    buktiOpen, setBuktiOpen, toggleBd,
+    buktiOpen, setBuktiOpen, toggleBd, lapsitBusy,
   } = store;
   const [jamMulai, jamSelesai] = jamHari.split('–').map((x) => x.trim());
   const myAtt = att.find((a) => a.memberId === me && a.tanggal === dateStr(0));
@@ -227,13 +228,15 @@ export function HariTab({ store }: { store: AppStore }) {
                 placeholder="Tulis laporan situasi akhir piket…"
                 value={lapsitText} onChange={(e) => setLapsitText(e.target.value)}
               />
-              <button
-                className="bigbtn"
+              <Button
+                variant="primary"
+                busy={lapsitBusy}
                 disabled={!unlocked || ev.length < checks.length || checks.length === 0 || !lapsitOpen}
-                onClick={kirimLapsit}
+                onClick={() => void kirimLapsit()}
+                style={{ width: '100%', marginTop: '10px' }}
               >
                 Kirim lapsit akhir piket
-              </button>
+              </Button>
               {unlocked && (ev.length < checks.length) && (
                 <p className="hint">Lengkapi {checks.length} foto bukti dulu.</p>
               )}

@@ -3,6 +3,7 @@ import { DAYS, dateStr } from '../piket';
 import { isOnline } from '../api';
 import type { AppStore } from '../hooks/useAppStore';
 import { WeekDragBoard } from '../components/WeekDragBoard';
+import { Empty } from '../components/Empty';
 
 export function MingguanTab({ store }: { store: AppStore }) {
   const {
@@ -55,7 +56,7 @@ export function MingguanTab({ store }: { store: AppStore }) {
                         {nama(id)}
                       </span>
                     );
-                  })}{crewIds.length === 0 && <span className="hint">—</span>}</span>
+                  })}{crewIds.length === 0 && <Empty text="Belum ada petugas." />}</span>
                   {admin && (
                     <span className="dedit">
                       {crewIds.map((id) => (

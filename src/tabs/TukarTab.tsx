@@ -1,13 +1,19 @@
 import { ArrowLeftRight } from 'lucide-react';
 import { DAYS } from '../piket';
 import type { AppStore } from '../hooks/useAppStore';
+import { Button } from '../components/Button';
+import { Empty } from '../components/Empty';
 
 export function TukarTab({ store }: { store: AppStore }) {
   const {
     meMember, mySlots, me, nama, warna, fromDay, setFromDay, dayDate,
     toDay, target, setToDay, setTarget, state, alasan, setAlasan, submitSwap,
     incoming, decide, outgoing, cancelSwap, admin, othersPending, expanded, setExpanded,
+    swapBusy,
   } = store;
+  const tukarOpts = DAYS.flatMap((d) =>
+    (state?.schedule[d] ?? []).filter((m) => m !== me).map((m) => ({ d, m })),
+  );
   return (
     <>
       <h2 className="sec">Giliran kamu</h2>
@@ -25,9 +31,7 @@ export function TukarTab({ store }: { store: AppStore }) {
       )}
       <h2 className="sec">Tukar dengan</h2>
       <div className="opts1">
-        {DAYS.flatMap((d) =>
-          (state?.schedule[d] ?? []).filter((m) => m !== me).map((m) => ({ d, m })),
-        ).map(({ d, m }) => (
+        {tukarOpts.map(({ d, m }) => (
           <button
             key={`${d}-${m}`}
             className={`opt ${toDay === d && target === m ? 'sel' : ''}`}
@@ -36,13 +40,14 @@ export function TukarTab({ store }: { store: AppStore }) {
             <i style={{ background: warna(m) }} />{nama(m)} • {dayDate(d)}
           </button>
         ))}
+        {tukarOpts.length === 0 && <Empty text="Belum ada rekan tukar." />}
       </div>
       <textarea
         className="reason" rows={3}
         placeholder="Alasan (opsional), misal: ada ujian pagi"
         value={alasan} onChange={(e) => setAlasan(e.target.value)}
       />
-      <button className="bigbtn" onClick={submitSwap}>Kirim permintaan tukar</button>
+      <Button variant="primary" busy={swapBusy} onClick={() => void submitSwap()} style={{ width: '100%', marginTop: '10px' }}>Kirim permintaan tukar</Button>
       {incoming.map((w) => (
         <div key={w.id} className="waitcard">
           <i className="pdot" style={{ background: warna(w.requester) }} />

@@ -3,9 +3,12 @@ import { Check, Info, TriangleAlert } from 'lucide-react';
 
 // Toast global (error/info/ok) dengan animasi framer-motion.
 export function Toast({ t, onClose }: { t: { msg: string; kind: 'error' | 'ok' | 'info' }; onClose: () => void }) {
+  const isErr = t.kind === 'error';
   return (
     <motion.div
       className={`toast ${t.kind}`} onClick={onClose}
+      role={isErr ? 'alert' : 'status'}
+      aria-live={isErr ? 'assertive' : 'polite'}
       initial={{ opacity: 0, y: -14, x: '-50%' }}
       animate={{ opacity: 1, y: 0, x: '-50%' }}
       exit={{ opacity: 0, y: -14, x: '-50%' }}

@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
+import { Button } from './Button';
 
-export function PinSheet({ pinInput, setPinInput, submitPin, onClose }: {
-  pinInput: string; setPinInput: (v: string) => void; submitPin: () => void; onClose: () => void;
+export function PinSheet({ pinInput, setPinInput, submitPin, onClose, busy }: {
+  pinInput: string; setPinInput: (v: string) => void; submitPin: () => void; onClose: () => void; busy?: boolean;
 }) {
   return (
     <motion.div
@@ -20,8 +21,8 @@ export function PinSheet({ pinInput, setPinInput, submitPin, onClose }: {
         onKeyDown={(e) => { if (e.key === 'Enter') void submitPin(); }}
       />
       <div className="row">
-        <button className="primary" onClick={submitPin}>Masuk</button>
-        <button onClick={onClose}>Batal</button>
+        <Button variant="primary" busy={busy} onClick={submitPin}>Masuk</Button>
+        <Button variant="secondary" onClick={onClose}>Batal</Button>
       </div>
     </motion.div>
   );

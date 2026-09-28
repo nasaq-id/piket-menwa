@@ -12,7 +12,8 @@ export function MakoPanel() {
   const [cur, setCur] = useState<{ lat: number; lng: number; radius: number } | null | undefined>(undefined);
   const [draft, setDraft] = useState<{ lat: number; lng: number; acc?: number } | null>(null);
   const [radius, setRadius] = useState('100');
-  const [busy, setBusy] = useState(false);
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -24,11 +25,11 @@ export function MakoPanel() {
   }, []);
 
   const pakaiLokasi = async () => {
-    setBusy(true);
+    setGpsBusy(true);
     setErr(null);
     setMsg(null);
     const g = await getGeo(15_000);
-    setBusy(false);
+    setGpsBusy(false);
     if (!g) return setErr('Lokasi tidak terbaca — izinkan akses lokasi di browser.');
     setDraft(g);
     if (g.acc > 50) setMsg(`Akurasi GPS ±${Math.round(g.acc)} m — kalau bisa ulangi dekat jendela / area terbuka.`);
@@ -37,9 +38,9 @@ export function MakoPanel() {
   const simpan = async () => {
     const p = draft ?? cur;
     if (!p) return setErr('Ambil lokasi dulu.');
-    setBusy(true);
+    setSaveBusy(true);
     const r = await superPut('/api/settings/mako', { lat: p.lat, lng: p.lng, radius: Number(radius) });
-    setBusy(false);
+    setSaveBusy(false);
     if (!r.ok) return setErr(r.error ?? 'Gagal simpan.');
     setCur({ lat: p.lat, lng: p.lng, radius: Number(radius) });
     setDraft(null);
@@ -69,8 +70,8 @@ export function MakoPanel() {
         )}
       </AnimatePresence>
       <div className="row">
-        <Button variant="secondary" busy={busy} onClick={() => void pakaiLokasi()}>
-          <Crosshair size={15} /> {busy && !draft ? 'Membaca GPS…' : 'Pakai lokasi saya sekarang'}
+        <Button variant="secondary" busy={gpsBusy} onClick={() => void pakaiLokasi()}>
+          <Crosshair size={15} /> {gpsBusy ? 'Membaca GPS…' : 'Pakai lokasi saya sekarang'}
         </Button>
       </div>
       <label className="wfield">
@@ -83,7 +84,7 @@ export function MakoPanel() {
           <motion.p className="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>{msg}</motion.p>
         )}
       </AnimatePresence>
-      <Button variant="primary" busy={busy} disabled={!shown} onClick={() => void simpan()}>Simpan lokasi mako</Button>
+      <Button variant="primary" busy={saveBusy} disabled={!shown} onClick={() => void simpan()}>Simpan lokasi mako</Button>
     </div>
   );
 }

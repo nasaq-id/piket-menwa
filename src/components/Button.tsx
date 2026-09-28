@@ -1,23 +1,26 @@
 import { motion } from 'framer-motion';
-import type { MouseEventHandler, ReactNode } from 'react';
+import type { CSSProperties, MouseEventHandler, ReactNode } from 'react';
 import { TAP } from './Motion';
 
 // Satu komponen tombol berbasis token (fase 0). Semua varian minimal 44px.
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'icon';
 
-export function Button({ variant = 'primary', busy = false, type = 'button', disabled, onClick, ariaLabel, children }: {
+export function Button({ variant = 'primary', busy = false, type = 'button', disabled, onClick, ariaLabel, className, style, children }: {
   variant?: ButtonVariant;
   busy?: boolean;
   type?: 'button' | 'submit' | 'reset';
   disabled?: boolean;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   ariaLabel?: string;
+  className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   return (
     <motion.button
       type={type}
-      className={`btn btn--${variant}`}
+      className={`btn btn--${variant}${className ? ` ${className}` : ''}`}
+      style={style}
       disabled={disabled || busy}
       onClick={onClick}
       aria-label={ariaLabel}

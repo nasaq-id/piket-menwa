@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './hooks/useAppStore';
 import { AppHeader } from './components/AppHeader';
 import { BottomTabs } from './components/BottomTabs';
+import { ConfirmSheet } from './components/ConfirmSheet';
 import { FaceCam } from './components/FaceCam';
 import { KontakSheet } from './components/KontakSheet';
 import { LogoutSheet } from './components/LogoutSheet';
@@ -59,6 +60,7 @@ export default function App() {
         <AnimatePresence>
           {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}
         </AnimatePresence>
+        <ConfirmSheet req={store.confirmReq} onResolve={store.resolveConfirm} />
       </div>
     );
   }
@@ -86,6 +88,7 @@ export default function App() {
             setPinInput={store.setPinInput}
             submitPin={store.submitPin}
             onClose={() => store.setShowPin(false)}
+            busy={store.pinBusy}
           />
         )}
       </AnimatePresence>
@@ -154,6 +157,7 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+      <ConfirmSheet req={store.confirmReq} onResolve={store.resolveConfirm} />
       <BottomTabs tab={tab} onTab={setTab} pendingCount={pending.length} hidden={navHidden} />
     </div>
   );

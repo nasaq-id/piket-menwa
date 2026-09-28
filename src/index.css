@@ -1,4 +1,4 @@
-:root { color-scheme: dark; --bg:#0f1413; --card:#161d1b; --line:#2a3532; --ink:#f2f5f3; --dim:#9db0aa; --accent:#e8f0ec; --danger:#f87171; --warning:#fbbf24; --on-accent:#111; --fs-xs:12px; --fs-sm:14px; --fs-md:16px; --fs-lg:20px; --fs-xl:26px; --radius:12px; --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; }
+:root { color-scheme: dark; --bg:#0f1413; --card:#161d1b; --line:#2a3532; --ink:#f2f5f3; --dim:#9db0aa; --accent:#e8f0ec; --danger:#f87171; --danger-strong:#b91c1c; --on-danger:#fff; --warning:#fbbf24; --on-accent:#111; --fs-xs:12px; --fs-sm:14px; --fs-md:16px; --fs-lg:20px; --fs-xl:26px; --radius:12px; --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; }
 * { box-sizing: border-box; }
 body { margin:0; background:#070a09; color:var(--ink); font-family: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
 .phone { max-width:400px; margin:0 auto; min-height:100svh; background:var(--bg); border-inline:1px solid var(--line); border-radius:0; display:flex; flex-direction:column; padding-bottom:84px; overflow:hidden; }
@@ -66,6 +66,8 @@ body { margin:0; background:#070a09; color:var(--ink); font-family: system-ui,-a
 .pinrow input { background:#0f1413; border:1px solid var(--line); color:var(--ink); border-radius:9px; padding:9px 10px; font-size:15px; letter-spacing:4px; text-align:center; width:100%; }
 .pinrow button { background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:9px; padding:9px; font-size:12px; cursor:pointer; }
 .pinmsg { font-size:12px; color:var(--dim); }
+.pinmsg.ok { color:#4ade80; }
+.pinmsg.err { color:var(--danger); }
 /* ---- Tactical HUD (eksperimen halaman register) ---- */
 .welcome.tac { font-family:ui-monospace, Menlo, Consolas, monospace; border:1px solid rgba(74,222,128,.25); border-radius:6px; background:repeating-linear-gradient(0deg, rgba(74,222,128,.03) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 0%, rgba(74,222,128,.08), transparent 60%), var(--bg); }
 .tac h1 { color:var(--accent); text-transform:uppercase; letter-spacing:2px; font-size:20px; }
@@ -415,7 +417,7 @@ button:active { transform:scale(.97); }
 .btn--primary { background:var(--accent); color:var(--on-accent); border:none; font-weight:700; }
 .btn--secondary { background:transparent; color:var(--ink); border-color:var(--line); }
 .btn--ghost { background:transparent; color:var(--ink); border-color:transparent; }
-.btn--danger { background:#b91c1c; color:#fff; border:none; font-weight:700; }
+.btn--danger { background:var(--danger-strong); color:var(--on-danger); border:none; font-weight:700; }
 .btn--icon { padding:0; }
 .btn--primary .spin, .btn--danger .spin { border-color:rgba(0,0,0,.25); border-top-color:currentColor; }
 .sheet .btn, .pinrow .btn { width:100%; }

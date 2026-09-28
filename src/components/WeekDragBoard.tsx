@@ -8,6 +8,7 @@ import { GripVertical } from 'lucide-react';
 import { DAYS, dateStr } from '../piket';
 import type { Member } from '../api';
 import type { DayKey } from '../piket';
+import { Empty } from './Empty';
 
 // ---- Drag-drop jadwal mingguan (minggu depan/seterusnya) ----
 // Kartu anggota yang bisa di-drag antar kolom hari. Dipakai di dalam
@@ -60,7 +61,7 @@ function DragDayColumn({ day, abbr, dateNum, isToday, ids, members, disabled }: 
             />
           );
         })}
-        {ids.length === 0 && <p className="dragempty">kosong</p>}
+        {ids.length === 0 && <Empty text="Belum ada anggota." />}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
   dropPush, ensurePush, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
@@ -64,7 +64,25 @@ export function useAppStore() {
   const [showLogout, setShowLogout] = useState(false);
   const [secretType, setSecretType] = useState<AuthType>('pin');
   const [secretNew, setSecretNew] = useState('');
-  const [secretMsg, setSecretMsg] = useState<string | null>(null);
+  const [secretMsg, setSecretMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [lapsitBusy, setLapsitBusy] = useState(false);
+  const [swapBusy, setSwapBusy] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
+  // Konfirmasi gaya sheet (pengganti popup browser) — Promise supaya
+  // pemanggil tetap sederhana: `const ok = await ask({...})`.
+  const [confirmReq, setConfirmReq] = useState<{ title: string; message: string; confirmLabel: string; danger: boolean } | null>(null);
+  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
+  const ask = useCallback((opts: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => {
+    setConfirmReq({ title: opts.title, message: opts.message, confirmLabel: opts.confirmLabel ?? 'Ya', danger: opts.danger ?? false });
+    return new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+    });
+  }, []);
+  const resolveConfirm = useCallback((v: boolean) => {
+    confirmResolveRef.current?.(v);
+    confirmResolveRef.current = null;
+    setConfirmReq(null);
+  }, []);
   const [showKontak, setShowKontak] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +132,10 @@ export function useAppStore() {
   };
 
   const faceLogin = () => {
-    if (!state?.fromApi) return alert('Butuh online untuk masuk.');
+    if (!state?.fromApi) {
+      setToast({ msg: 'Butuh online untuk masuk.', kind: 'error' });
+      return;
+    }
     setCam({ mode: 'identify' });
   };
 
@@ -130,7 +151,9 @@ export function useAppStore() {
   const saveSecret = async () => {
     if (!me) return;
     const r = await setLoginSecret(me, dateStr(0), secretType, secretNew);
-    setSecretMsg(r.ok ? `${secretType === 'pin' ? 'PIN' : 'Password'} tersimpan ✓` : r.error);
+    setSecretMsg(r.ok
+      ? { text: `${secretType === 'pin' ? 'PIN' : 'Password'} tersimpan ✓`, ok: true }
+      : { text: r.error, ok: false });
     if (r.ok) setSecretNew('');
   };
 
@@ -396,7 +419,8 @@ export function useAppStore() {
   })();
 
   const putarRotasi = async () => {    if (!state || !admin) return;
-    if (!confirm('Putar rotasi? Crew tiap hari geser maju 1 hari (Jumat → Senin).')) return;
+    const ok = await ask({ title: 'Putar rotasi?', message: 'Crew tiap hari geser maju 1 hari (Jumat → Senin).', confirmLabel: 'Putar' });
+    if (!ok) return;
     const sch = state.schedule;
     const next = { Senin: sch.Jumat, Selasa: sch.Senin, Rabu: sch.Selasa, Kamis: sch.Rabu, Jumat: sch.Kamis };
     setState({ ...state, schedule: next });
@@ -456,7 +480,7 @@ export function useAppStore() {
       const dataUrl = await stampPhoto(f, geo); // kompres + stempel tgl/jam (+koordinat)
       const res = await uploadEvidence(dateStr(0), me, judul, dataUrl);
       if (!res.ok) {
-        alert(res.error ?? 'Gagal upload');
+        setToast({ msg: res.error ?? 'Gagal upload', kind: 'error' });
       } else {
         // server otomatis menandai tugas selesai → refresh keduanya
         const [c, e] = await Promise.all([loadChecks(dateStr(0), me), loadEvidence(dateStr(0), dateStr(0), admin ? undefined : me || undefined)]);
@@ -465,7 +489,7 @@ export function useAppStore() {
         if (me) setNilaiHariIni(await loadNilaiToday(dateStr(0), me));
       }
     } catch {
-      alert('Baca/kompres foto gagal');
+      setToast({ msg: 'Baca/kompres foto gagal', kind: 'error' });
     } finally {
       setUploadingTugas(null);
       setPendingTugas(null);
@@ -495,25 +519,40 @@ export function useAppStore() {
 
   const kirimLapsit = async () => {
     if (!unlocked) return needVerify();
-    if (!state?.fromApi) return alert('Butuh online untuk kirim lapsit.');
-    const g = (await getGeo()) ?? geo;
-    if (g) setGeo(g);
-    const res = await submitLapsit(dateStr(0), me, lapsitText, g);
-    if (!res.ok) return alert(res.error ?? 'Gagal kirim lapsit');
-    setLapsitText('');
-    const rows = await loadLapsit(dateStr(0), dateStr(0), admin ? undefined : me || undefined);
-    if (rows) setLapsit(rows);
-    if (me) setNilaiHariIni(await loadNilaiToday(dateStr(0), me));
+    if (!state?.fromApi) {
+      setToast({ msg: 'Butuh online untuk kirim lapsit.', kind: 'error' });
+      return;
+    }
+    setLapsitBusy(true);
+    try {
+      const g = (await getGeo()) ?? geo;
+      if (g) setGeo(g);
+      const res = await submitLapsit(dateStr(0), me, lapsitText, g);
+      if (!res.ok) {
+        setToast({ msg: res.error ?? 'Gagal kirim lapsit', kind: 'error' });
+        return;
+      }
+      setLapsitText('');
+      const rows = await loadLapsit(dateStr(0), dateStr(0), admin ? undefined : me || undefined);
+      if (rows) setLapsit(rows);
+      if (me) setNilaiHariIni(await loadNilaiToday(dateStr(0), me));
+    } finally {
+      setLapsitBusy(false);
+    }
   };
 
   // Absen: ambil lokasi dulu (geofence mako), baru buka kamera. Jadwal, jam,
   // & lokasi dicek server saat minta challenge → gagal cepat sebelum scan.
   const [absenBusy, setAbsenBusy] = useState(false);
   const needVerify = async () => {
-    if (!state?.fromApi) return alert('Butuh online untuk absen.');
+    if (!state?.fromApi) {
+      setToast({ msg: 'Butuh online untuk absen.', kind: 'error' });
+      return;
+    }
     if (!meMember || absenBusy) return;
     if (!crew.includes(me)) {
-      return alert('Kamu tidak ada jadwal hari ini — minta Admin susun petugas piket dulu (tab Mingguan, mode Admin).');
+      setToast({ msg: 'Kamu tidak ada jadwal hari ini — minta Admin susun petugas piket dulu (tab Mingguan, mode Admin).', kind: 'error' });
+      return;
     }
     setAbsenBusy(true);
     const g = await getGeo(10_000);
@@ -611,28 +650,54 @@ export function useAppStore() {
   };
 
   const submitSwap = async () => {
-    if (target === me) return alert('Pilih rekan tukar yang beda.');
-    if (!state) return;
-    if (fromDay === toDay) return alert('Hari asal & tujuan harus beda.');
-    if (!state.schedule[fromDay]?.includes(me)) return alert(`Kamu tidak piket di ${fromDay}.`);
-    if (!state.schedule[toDay]?.includes(target)) return alert(`${nama(target)} tidak piket di ${toDay}.`);
-    if (state.fromApi) {
-      const ok = await createSwapRemote({ requester: me, target, fromDay, toDay, alasan });
-      if (!ok) return alert('Gagal simpan (server mati?).');
-    } else {
-      const cur = load<SwapRow[]>('piket-swaps', []);
-      save('piket-swaps', [{ id: Math.random().toString(36).slice(2, 9), requester: me, target, fromDay, toDay, alasan, status: 'pending', createdAt: Date.now() }, ...cur]);
+    if (target === me) {
+      setToast({ msg: 'Pilih rekan tukar yang beda.', kind: 'error' });
+      return;
     }
-    setAlasan('');
-    void refresh();
+    if (!state) return;
+    if (fromDay === toDay) {
+      setToast({ msg: 'Hari asal & tujuan harus beda.', kind: 'error' });
+      return;
+    }
+    if (!state.schedule[fromDay]?.includes(me)) {
+      setToast({ msg: `Kamu tidak piket di ${fromDay}.`, kind: 'error' });
+      return;
+    }
+    if (!state.schedule[toDay]?.includes(target)) {
+      setToast({ msg: `${nama(target)} tidak piket di ${toDay}.`, kind: 'error' });
+      return;
+    }
+    setSwapBusy(true);
+    try {
+      if (state.fromApi) {
+        const ok = await createSwapRemote({ requester: me, target, fromDay, toDay, alasan });
+        if (!ok) {
+          setToast({ msg: 'Gagal simpan (server mati?).', kind: 'error' });
+          return;
+        }
+      } else {
+        const cur = load<SwapRow[]>('piket-swaps', []);
+        save('piket-swaps', [{ id: Math.random().toString(36).slice(2, 9), requester: me, target, fromDay, toDay, alasan, status: 'pending', createdAt: Date.now() }, ...cur]);
+      }
+      setAlasan('');
+      void refresh();
+    } finally {
+      setSwapBusy(false);
+    }
   };
 
   const decide = async (w: SwapRow, approve: boolean) => {
     if (state?.fromApi) {
       const ok = await decideSwapRemote(w.id, approve, me);
-      if (!ok) return alert('Gagal (hanya yang diminta / Admin).');
+      if (!ok) {
+        setToast({ msg: 'Gagal (hanya yang diminta / Admin).', kind: 'error' });
+        return;
+      }
     } else {
-      if (me !== w.target && !admin) return alert('Hanya yang diminta / Admin.');
+      if (me !== w.target && !admin) {
+        setToast({ msg: 'Hanya yang diminta / Admin.', kind: 'error' });
+        return;
+      }
       const cur = load<SwapRow[]>('piket-swaps', []).map((x) =>
         x.id === w.id ? { ...x, status: approve ? ('approved' as const) : ('rejected' as const) } : x);
       save('piket-swaps', cur);
@@ -647,10 +712,14 @@ export function useAppStore() {
   };
 
   const cancelSwap = async (w: SwapRow) => {
-    if (!confirm('Batalkan pengajuan ini?')) return;
+    const okConfirm = await ask({ title: 'Batalkan pengajuan?', message: 'Pengajuan tukar akan dibatalkan.', confirmLabel: 'Batalkan', danger: true });
+    if (!okConfirm) return;
     if (state?.fromApi) {
       const ok = await cancelSwapRemote(w.id, me);
-      if (!ok) return alert('Gagal membatalkan.');
+      if (!ok) {
+        setToast({ msg: 'Gagal membatalkan.', kind: 'error' });
+        return;
+      }
     } else {
       save('piket-swaps', load<SwapRow[]>('piket-swaps', []).map((x) =>
         x.id === w.id ? { ...x, status: 'cancelled' as const } : x));
@@ -713,7 +782,10 @@ export function useAppStore() {
     setDragSaving(true);
     const ok = await saveWeekRosterRemote(weekDates[0], dragSchedule, weekJamRow);
     setDragSaving(false);
-    if (!ok) return alert('Gagal simpan (server mati / bukan Admin?).');
+    if (!ok) {
+      setToast({ msg: 'Gagal simpan (server mati / bukan Admin?).', kind: 'error' });
+      return;
+    }
     setWeekSchedule(dragSchedule);
     setWeekOverridden(true);
     setDragDirty(false);
@@ -728,9 +800,13 @@ export function useAppStore() {
 
   // Buang override minggu ini → kembali mengikuti template dasar.
   const clearWeekOverride = async () => {
-    if (!confirm(`Hapus susunan khusus minggu ${rangeLabel}? Minggu ini kembali mengikuti jadwal dasar.`)) return;
+    const okConfirm = await ask({ title: `Hapus susunan minggu ${rangeLabel}?`, message: 'Minggu ini kembali mengikuti jadwal dasar.', confirmLabel: 'Hapus', danger: true });
+    if (!okConfirm) return;
     const ok = await clearWeekRosterRemote(weekDates[0]);
-    if (!ok) return alert('Gagal (bukan Admin?).');
+    if (!ok) {
+      setToast({ msg: 'Gagal (bukan Admin?).', kind: 'error' });
+      return;
+    }
     const w = await loadWeekRoster(weekDates[0]);
     if (w) {
       setWeekSchedule(w.schedule);
@@ -743,28 +819,46 @@ export function useAppStore() {
   };
 
   const gearClick = () => {
-    if (admin) return setAdmin(false); // keluar mode Admin
-    if (!state || !state.fromApi) return setAdmin(true); // offline: lokal saja
+    if (admin) {
+      setAdmin(false);
+      setToast({ msg: 'Mode admin dimatikan', kind: 'info' });
+      return;
+    }
+    // Mode admin wajib verifikasi PIN ke server — offline ditolak.
+    if (!state || !state.fromApi) {
+      setToast({ msg: 'Mode admin butuh koneksi ke server.', kind: 'error' });
+      return;
+    }
     setPinInput('');
     setShowPin(true);
   };
 
   const submitPin = async () => {
-    const res = await verifyPin(pinInput);
-    if (res === null) {
-      // server unreachable → anggap offline, izinkan lokal
-      setAdmin(true);
-    } else if (res) {
-      setAdmin(true);
-    } else {
-      return alert('PIN salah.');
+    setPinBusy(true);
+    try {
+      const res = await verifyPin(pinInput);
+      if (res === null) {
+        // server tidak terjangkau → tolak, jangan lolos tanpa PIN
+        setToast({ msg: 'Mode admin butuh koneksi ke server.', kind: 'error' });
+        return;
+      } else if (res) {
+        setAdmin(true);
+      } else {
+        setToast({ msg: 'PIN salah.', kind: 'error' });
+        return;
+      }
+      setShowPin(false);
+      setPinInput('');
+    } finally {
+      setPinBusy(false);
     }
-    setShowPin(false);
-    setPinInput('');
   };
 
   const enableNotif = async () => {
-    if (!('Notification' in window)) return alert('Browser tidak dukung notifikasi.');
+    if (!('Notification' in window)) {
+      setToast({ msg: 'Browser tidak dukung notifikasi.', kind: 'error' });
+      return;
+    }
     const p = await Notification.requestPermission();
     if (p === 'granted') {
       if (me) void ensurePush(me);
@@ -821,7 +915,7 @@ export function useAppStore() {
     submitSwap, decide, cancelSwap, addTo, removeFrom, jamColon, setJam,
     moveWeekMember, saveWeekDrag, resetWeekDrag, clearWeekOverride,
     gearClick, submitPin, enableNotif, titleTap, hash,
-    admin, showPin, setShowPin, pinInput, setPinInput, online,
+    admin, showPin, setShowPin, pinInput, setPinInput, pinBusy, online,
     target, setTarget, fromDay, setFromDay, toDay, setToDay, alasan, setAlasan,
     weekOff, setWeekOff, weekStat, expanded, setExpanded, pickDay, setPickDay,
     weekLoading, dragSchedule, dragDirty, dragSaving, weekOverridden,
@@ -830,8 +924,9 @@ export function useAppStore() {
     navHidden, showLogout, setShowLogout, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, saveSecret,
     showKontak, setShowKontak, saveKontak,
     avatarBusy, avatarInputRef, onAvatarFile, removeAvatar,
-    lapsit, lapsitText, setLapsitText, bdOpen, setBdOpen, buktiOpen, setBuktiOpen,
+    lapsit, lapsitText, setLapsitText, lapsitBusy, swapBusy, bdOpen, setBdOpen, buktiOpen, setBuktiOpen,
     bdDone, bdSecOpen, setBdSecOpen, nilaiHariIni,
+    confirmReq, ask, resolveConfirm,
   };
 }
 

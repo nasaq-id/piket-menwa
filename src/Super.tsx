@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   deleteMember, isOnline, loadAttendance, loadEvidence, loadFaceSummary,
@@ -8,6 +8,10 @@ import {
 } from './api';
 import { dateStr } from './piket';
 import { MakoPanel } from './components/MakoPanel';
+import { Button } from './components/Button';
+import { ConfirmSheet, type ConfirmRequest } from './components/ConfirmSheet';
+import { Empty } from './components/Empty';
+import { Toast } from './components/Toast';
 
 const fmtTime = (t: number) =>
   new Date(t).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -28,6 +32,27 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
   const [lbFrom, setLbFrom] = useState(() => dateStr(0).slice(0, 8) + '01');
   const [lbTo, setLbTo] = useState(() => dateStr(0));
   const [lb, setLb] = useState<{ memberId: string; nama: string; n: number; rata2: number | null }[]>([]);
+  const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
+  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
+  const ask = (opts: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => {
+    setConfirmReq({ title: opts.title, message: opts.message, confirmLabel: opts.confirmLabel ?? 'Ya', danger: opts.danger ?? false });
+    return new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+    });
+  };
+  const resolveConfirm = (v: boolean) => {
+    confirmResolveRef.current?.(v);
+    confirmResolveRef.current = null;
+    setConfirmReq(null);
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const reloadMembers = async () => {
     const s = await loadState();
@@ -36,16 +61,25 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
   };
 
   const hapus = async (id: string, nama_: string) => {
-    if (!confirm(`Hapus ${nama_} + wajah, foto & jadwalnya?`)) return;
-    const ok = await deleteMember(id);
-    if (!ok) return alert('Gagal hapus (PIN superadmin / online).');
+    const yes = await ask({ title: 'Hapus anggota?', message: `Hapus ${nama_} + wajah, foto & jadwalnya?`, confirmLabel: 'Hapus', danger: true });
+    if (!yes) return;
+    const okDel = await deleteMember(id);
+    if (!okDel) {
+      setToast({ msg: 'Gagal hapus (PIN superadmin / online).', kind: 'error' });
+      return;
+    }
     void reloadMembers();
   };
 
   const submitPin = async () => {
-    const r = await verifySuper(pin);
-    if (r) setOk(true);
-    else alert(r === null ? 'Server tidak terjangkau.' : 'PIN salah.');
+    setPinBusy(true);
+    try {
+      const r = await verifySuper(pin);
+      if (r) setOk(true);
+      else setToast({ msg: r === null ? 'Server tidak terjangkau.' : 'PIN salah.', kind: 'error' });
+    } finally {
+      setPinBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -96,9 +130,13 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
           onKeyDown={(e) => { if (e.key === 'Enter') void submitPin(); }}
         />
         <div className="row">
-          <button className="primary" onClick={submitPin}>Masuk</button>
-          <button onClick={onExit}>Tutup</button>
+          <Button variant="primary" busy={pinBusy} onClick={() => void submitPin()}>Masuk</Button>
+          <Button variant="secondary" onClick={onExit}>Tutup</Button>
         </div>
+        <AnimatePresence>
+          {toast && <Toast t={toast} onClose={() => setToast(null)} />}
+        </AnimatePresence>
+        <ConfirmSheet req={confirmReq} onResolve={resolveConfirm} />
       </motion.div>
     );
   }
@@ -181,7 +219,7 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
       <h2>Rekap harian</h2>
       <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
       <h3>Absensi ({att.length})</h3>
-      {att.length === 0 && <p className="hint">Belum ada absen.</p>}
+      {att.length === 0 && <Empty text="Belum ada absen." />}
       {att.map((a) => (
         <p key={a.id} className="hist">
           {nama(a.memberId)} — {a.status === 'terlambat' ? <b className="late">terlambat</b> : 'hadir'} {a.jam}
@@ -193,8 +231,8 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
         {ev.map((e) => (
           <img key={e.id} src={e.file} alt={e.tugas} title={`${e.tugas} — ${nama(e.memberId)}`} onClick={() => setPreview(e.file)} />
         ))}
-        {ev.length === 0 && <p className="hint">Belum ada foto.</p>}
       </div>
+      {ev.length === 0 && <Empty text="Belum ada foto." />}
       <h3>Lapsit ({laps.length})</h3>
       {laps.map((l) => (
         <div key={l.id} className="card sm">
@@ -202,17 +240,18 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
           <span className="dim">{l.lat && l.lng ? `${Number(l.lat).toFixed(5)}, ${Number(l.lng).toFixed(5)}` : 'GPS off'}</span>
         </div>
       ))}
-      {laps.length === 0 && <p className="hint">Belum ada lapsit.</p>}
+      {laps.length === 0 && <Empty text="Belum ada lapsit." />}
       <h3>Tukar ({swaps.length})</h3>
       {swaps.map((s) => (
         <p key={s.id} className="hist">{nama(s.requester)} ⇄ {nama(s.target)} • {s.status}</p>
       ))}
+      {swaps.length === 0 && <Empty text="Belum ada pengajuan tukar." />}
 
       <h2>Log aktivitas</h2>
       {feed.map((f, i) => (
         <p key={i} className="hist">[{f.jenis}] {f.teks} <span className="dim">• {fmtTime(f.t)}</span></p>
       ))}
-      {feed.length === 0 && <p className="hint">Kosong.</p>}
+      {feed.length === 0 && <Empty text="Belum ada aktivitas." />}
 
       <AnimatePresence>
         {preview && (
@@ -237,6 +276,10 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
           </motion.div>
         )}
       </AnimatePresence>
+      <AnimatePresence>
+        {toast && <Toast t={toast} onClose={() => setToast(null)} />}
+      </AnimatePresence>
+      <ConfirmSheet req={confirmReq} onResolve={resolveConfirm} />
     </motion.div>
   );
 }

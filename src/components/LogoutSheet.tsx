@@ -10,7 +10,7 @@ export function LogoutSheet({
 }: {
   member: Member;
   secretType: AuthType; setSecretType: (t: AuthType) => void;
-  secretNew: string; setSecretNew: (v: string) => void; secretMsg: string | null; setSecretMsg: (v: string | null) => void;
+  secretNew: string; setSecretNew: (v: string) => void; secretMsg: { text: string; ok: boolean } | null; setSecretMsg: (v: { text: string; ok: boolean } | null) => void;
   onSaveSecret: () => void; onEditKontak: () => void; avatarBusy: boolean;
   avatarInputRef: RefObject<HTMLInputElement | null>;
   onAvatarFile: (f: File | undefined) => void; onRemoveAvatar: () => void;
@@ -60,11 +60,11 @@ export function LogoutSheet({
           <AnimatePresence mode="wait">
             {secretMsg && (
               <motion.span
-                key={secretMsg} className="pinmsg"
+                key={secretMsg.text} className={secretMsg.ok ? 'pinmsg ok' : 'pinmsg err'}
                 initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
               >
-                {secretMsg}
+                {secretMsg.text}
               </motion.span>
             )}
           </AnimatePresence>

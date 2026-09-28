@@ -611,17 +611,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
           )}
         </motion.div>
       </AnimatePresence>
-      {err && (
-        <motion.em
-          key={err}
-          className="werr"
-          initial={{ x: 0 }}
-          animate={{ x: [0, -7, 7, -4, 4, 0] }}
-          transition={{ duration: 0.35 }}
-        >
-          {err}
-        </motion.em>
-      )}
+      <ShakeErr msg={err} />
       {dupe && (
         <div className="dupebox">
           <b>Akun anda sudah terdaftar.</b>
