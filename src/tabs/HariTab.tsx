@@ -202,8 +202,7 @@ export function HariTab({ store }: { store: AppStore }) {
                           </button>
                           <button
                             type="button"
-                            className={`ttitle ${c.done ? 'strike' : ''}`}
-                            style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+                            className={`ttitle ttitlebtn ${c.done ? 'strike' : ''}`}
                             onClick={(e) => { e.stopPropagation(); taskTap(c); }}
                             aria-label={`${c.judul}${ph ? ' — foto terkirim' : ' — ketuk untuk ambil foto'}`}
                           >

@@ -1267,26 +1267,31 @@ app.post('/api/breakdown', (req, res) => {
 // ---- Nilai OTOMATIS real-time: 4 foto wajib (60%) + checklist opsional
 // 34 item (30%) + lapsit terkirim (10%). TIDAK ADA verifikasi manual —
 // begitu syarat terpenuhi, nilai langsung terhitung & masuk leaderboard.
-const nilaiOtomatis = (tanggal: string, memberId: string): number => {
-  const needFoto = db.select().from(tasks).where(eq(tasks.tanggal, 'template')).all().length || 1;
-  const gotFoto = new Set(
+const nilaiKomponen = (tanggal: string, memberId: string) => {
+  const fotoMax = db.select().from(tasks).where(eq(tasks.tanggal, 'template')).all().length || 1;
+  const foto = new Set(
     db.select().from(evidence).where(and(eq(evidence.tanggal, tanggal), eq(evidence.memberId, memberId))).all()
       .map((e) => e.tugas),
   ).size;
-  const gotBd = db.select().from(breakdown)
-    .where(and(eq(breakdown.tanggal, tanggal), eq(breakdown.memberId, memberId))).all().length;
-  const gotLapsit = db.select().from(lapsit)
+  const rowsBd = db.select().from(breakdown)
+    .where(and(eq(breakdown.tanggal, tanggal), eq(breakdown.memberId, memberId))).all();
+  const rincian = rowsBd.length;
+  const rincianKeys = rowsBd.map((r) => r.itemKey);
+  const lapsit = db.select().from(lapsit)
     .where(and(eq(lapsit.tanggal, tanggal), eq(lapsit.memberId, memberId))).all().length > 0;
-  const fotoScore = Math.min(1, gotFoto / needFoto) * 60;
-  const bdScore = Math.min(1, gotBd / BREAKDOWN_TOTAL) * 30;
-  const lapsitScore = gotLapsit ? 10 : 0;
-  return Math.round((fotoScore + bdScore + lapsitScore) * 100) / 100;
+  const fotoScore = Math.min(1, foto / fotoMax) * 60;
+  const bdScore = Math.min(1, rincian / BREAKDOWN_TOTAL) * 30;
+  const lapsitScore = lapsit ? 10 : 0;
+  const nilai = Math.round((fotoScore + bdScore + lapsitScore) * 100) / 100;
+  return { foto, fotoMax, rincian, rincianMax: BREAKDOWN_TOTAL, rincianKeys, lapsit, nilai };
 };
+
+const nilaiOtomatis = (tanggal: string, memberId: string): number => nilaiKomponen(tanggal, memberId).nilai;
 
 // Rekap leaderboard real-time (ganti /api/nilai/rekap lama yg butuh verifikasi
 // manual ketua/wakil — server yg gak pernah dipakai UI-nya). Dihitung dari
 // SEMUA member yg piket di rentang tanggal, bukan cuma yg punya assessment.
-app.get('/api/nilai/leaderboard', (req, res) => {
+app.get('/api/nilai/leaderboard', requireSuper, (req, res) => {
   const { from, to } = req.query as Record<string, string | undefined>;
   const f = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : todayLocal();
   const t = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : todayLocal();
@@ -1319,12 +1324,41 @@ app.get('/api/nilai/leaderboard', (req, res) => {
 });
 
 // Nilai hari ini utk 1 member (dipakai kartu "Nilai Piketmu" di HP).
+// Privat: boleh bila PIN superadmin benar, atau attest milik member itu valid.
 app.get('/api/nilai/today', (req, res) => {
-  const { date, memberId } = req.query as Record<string, string | undefined>;
+  const { date, memberId, attest } = req.query as Record<string, string | undefined>;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || !memberId) {
     return void res.status(400).json({ error: 'date & memberId wajib' });
   }
-  res.json({ nilai: nilaiOtomatis(date, memberId) });
+  const isSuper = pinEq(req.header('x-super-pin') ?? '', SUPER_PIN);
+  if (!isSuper && !checkAttest(attest, memberId, date as string)) {
+    return void res.status(403).json({ error: 'Login dulu hari ini.' });
+  }
+  res.json({ nilai: nilaiOtomatis(date as string, memberId) });
+});
+
+// Rincian nilai per tanggal utk 1 member (superadmin saja, tab Nilai).
+app.get('/api/nilai/detail', requireSuper, (req, res) => {
+  const { memberId, from, to } = req.query as Record<string, string | undefined>;
+  if (!memberId) return void res.status(400).json({ error: 'memberId wajib' });
+  const f = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : todayLocal();
+  const t = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : todayLocal();
+  const rows: ({ tanggal: string } & ReturnType<typeof nilaiKomponen>)[] = [];
+  let d = new Date(f + 'T00:00');
+  const end = new Date(t + 'T00:00');
+  while (d <= end) {
+    const tanggal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5) {
+      const day = DAYS[dow - 1];
+      const week = mondayOf(tanggal);
+      const crew = new Set(effectiveRosterDay(day, week).map((r) => r.memberId));
+      if (crew.has(memberId)) rows.push({ tanggal, ...nilaiKomponen(tanggal, memberId) });
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  rows.sort((a, b) => (a.tanggal < b.tanggal ? 1 : -1));
+  res.json({ rows });
 });
 
 // ---- settings ketua/wakil (superadmin) ----

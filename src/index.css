@@ -162,6 +162,7 @@ h2 { font-size:16px; margin:18px 0 4px; }
 .spin, .tasks li .cam .spin { width:16px; height:16px; border-radius:99px; border:2px solid var(--line); border-top-color:#e8f0ec; animation:spin 0.8s linear infinite; display:inline-block; }
 @keyframes spin { to { transform:rotate(360deg); } }
 .tasks li .ttitle { flex:1; }
+.ttitlebtn { background:none; border:0; padding:0; text-align:left; font:inherit; color:inherit; cursor:pointer; flex:1; }
 .box { width:20px; height:20px; flex:none; border:1.5px solid #5b6d66; border-radius:6px; display:grid; place-items:center; font-size:13px; color:#111; }
 .box.on { background:var(--accent); border-color:var(--accent); }
 .strike { text-decoration:line-through; color:var(--dim); }
@@ -513,3 +514,16 @@ button:active { transform:scale(.97); }
 .evthumbbtn { background:none; border:none; padding:0; cursor:pointer; border-radius:10px; overflow:hidden; min-height:44px; min-width:44px; }
 .evthumbbtn img { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; }
 .tac .thumbbtn, .tac .thumbbtn img, .tac .evthumbbtn, .tac .evthumbbtn img { border-radius:var(--radius); }
+
+/* ---- Fase 9: tab Nilai superadmin (peringkat + rincian 34 poin) ---- */
+.lblist { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.lbitem { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.lbrow { width:100%; min-height:44px; display:flex; align-items:center; gap:10px; background:none; border:none; color:inherit; font:inherit; cursor:pointer; padding:10px 12px; text-align:left; }
+.lbrow .lbrank { color:var(--dim); min-width:20px; }
+.lbrow .lbname { flex:1; }
+.lbrow em { color:var(--dim); font-style:normal; font-size:12px; }
+.lbcollapser { overflow:hidden; }
+.lbdate { border-top:1px solid var(--line); }
+.lbdaterow { width:100%; min-height:44px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:none; border:none; color:inherit; font:inherit; font-size:12px; cursor:pointer; padding:10px 12px; text-align:left; }
+.lbgroup { padding:4px 12px 10px; font-size:13px; }
+.lbgroup b { display:block; margin:8px 0 2px; font-size:13px; }

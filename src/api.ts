@@ -605,7 +605,10 @@ export async function toggleBreakdown(tanggal: string, memberId: string, itemKey
 }
 
 // Nilai piket hari ini (otomatis: foto wajib + checklist opsional + lapsit).
+// Privat milik sendiri: kirim attest wajah hari itu agar server percaya.
 export async function loadNilaiToday(date: string, memberId: string): Promise<number | null> {
-  const r = await getAuthed<{ nilai: number }>(`/api/nilai/today?date=${date}&memberId=${encodeURIComponent(memberId)}`);
+  const attest = getAttest(memberId, date);
+  const q = attest ? `&attest=${encodeURIComponent(attest)}` : '';
+  const r = await getAuthed<{ nilai: number }>(`/api/nilai/today?date=${date}&memberId=${encodeURIComponent(memberId)}${q}`);
   return r?.nilai ?? null;
 }

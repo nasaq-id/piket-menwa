@@ -7,6 +7,7 @@ import {
   type LapsitRow, type Overview, type SwapRow,
 } from './api';
 import { dateStr } from './piket';
+import { BREAKDOWN } from './breakdown';
 import { MakoPanel } from './components/MakoPanel';
 import { Button } from './components/Button';
 import { ConfirmSheet } from './components/ConfirmSheet';
@@ -19,14 +20,22 @@ import type { PreviewState } from './hooks/useAppStore';
 const fmtTime = (t: number) =>
   new Date(t).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-type SuperTab = 'ringkasan' | 'absensi' | 'anggota' | 'pengaturan';
+type SuperTab = 'ringkasan' | 'absensi' | 'nilai' | 'anggota' | 'pengaturan';
 
 const TABS: { id: SuperTab; label: string }[] = [
   { id: 'ringkasan', label: 'Ringkasan' },
   { id: 'absensi', label: 'Absensi' },
+  { id: 'nilai', label: 'Nilai' },
   { id: 'anggota', label: 'Anggota' },
   { id: 'pengaturan', label: 'Pengaturan' },
 ];
+
+interface LbRow { memberId: string; nama: string; n: number; rata2: number | null }
+interface NilaiDetail {
+  tanggal: string; foto: number; fotoMax: number;
+  rincian: number; rincianMax: number; rincianKeys: string[];
+  lapsit: boolean; nilai: number;
+}
 
 const loadTab = (): SuperTab => {
   try {
@@ -52,7 +61,11 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [lbFrom, setLbFrom] = useState(() => dateStr(0).slice(0, 8) + '01');
   const [lbTo, setLbTo] = useState(() => dateStr(0));
-  const [lb, setLb] = useState<{ memberId: string; nama: string; n: number; rata2: number | null }[]>([]);
+  const [lb, setLb] = useState<LbRow[]>([]);
+  const [openLb, setOpenLb] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, NilaiDetail[]>>({});
+  const [detailBusy, setDetailBusy] = useState<string | null>(null);
+  const [openTgl, setOpenTgl] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const { req: confirmReq, ask, resolve: resolveConfirm } = useConfirm();
@@ -121,13 +134,31 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (!ok) return;
     (async () => {
-      const r = await superGet<{ rows: { memberId: string; nama: string; n: number; rata2: number | null }[] }>(
+      const r = await superGet<{ rows: LbRow[] }>(
         `/api/nilai/leaderboard?from=${lbFrom}&to=${lbTo}`,
       );
       if (!r) return;
       setLb(r.rows.sort((a, b) => (b.rata2 ?? -1) - (a.rata2 ?? -1)));
     })();
   }, [ok, lbFrom, lbTo]);
+
+  // Rincian per tanggal dimuat saat baris peringkat dibuka.
+  useEffect(() => {
+    if (!ok || !openLb) return;
+    const key = `${openLb}|${lbFrom}|${lbTo}`;
+    if (detail[key]) return;
+    let batal = false;
+    (async () => {
+      setDetailBusy(openLb);
+      const r = await superGet<{ rows: NilaiDetail[] }>(
+        `/api/nilai/detail?memberId=${encodeURIComponent(openLb)}&from=${lbFrom}&to=${lbTo}`,
+      );
+      if (batal) return;
+      if (r) setDetail((d) => ({ ...d, [key]: r.rows }));
+      setDetailBusy(null);
+    })();
+    return () => { batal = true; };
+  }, [ok, openLb, lbFrom, lbTo, detail]);
 
   if (!ok) {
     return (
@@ -221,6 +252,16 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
                   </motion.div>
                 ))}
               </div>
+              <h2>3 Teratas Nilai</h2>
+              {lb.slice(0, 3).map((r, i) => (
+                <p key={r.memberId} className="hist">{i + 1}. {r.nama} — <b>{r.rata2 ?? '—'}</b></p>
+              ))}
+              {lb.length === 0 && <Empty text="Belum ada nilai terverifikasi." />}
+              {lb.length > 0 && (
+                <div className="row">
+                  <Button variant="secondary" onClick={() => setTab('nilai')}>Lihat semua</Button>
+                </div>
+              )}
               <h2>Log aktivitas</h2>
               {feed.map((f, i) => (
                 <p key={i} className="hist">[{f.jenis}] {f.teks} <span className="dim">• {fmtTime(f.t)}</span></p>
@@ -299,27 +340,112 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
                 </table>
               </div>
 
+            </>
+          )}
+
+          {tab === 'nilai' && (
+            <>
               <h2>Peringkat Nilai (rahasia)</h2>
+              <p className="hint">Foto 60% · Rincian 30% · Lapsit 10%</p>
               <div className="row">
                 <input type="date" value={lbFrom} onChange={(e) => e.target.value && setLbFrom(e.target.value)} aria-label="Nilai dari tanggal" />
                 <input type="date" value={lbTo} onChange={(e) => e.target.value && setLbTo(e.target.value)} aria-label="Nilai sampai tanggal" />
               </div>
-              <div className="supscroll">
-                <table className="suptable">
-                  <thead><tr><th>#</th><th>Nama</th><th>Rata-rata</th><th>Dinilai</th></tr></thead>
-                  <tbody>
-                    {lb.map((r, i) => (
-                      <tr key={r.memberId}>
-                        <td>{i + 1}</td>
-                        <td>{r.nama}</td>
-                        <td><b>{r.rata2 ?? '—'}</b></td>
-                        <td>{r.n}x</td>
-                      </tr>
-                    ))}
-                    {lb.length === 0 && <tr><td colSpan={4} className="hint">Belum ada nilai terverifikasi.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
+              {lb.length === 0 && <Empty text="Belum ada nilai terverifikasi." />}
+              <ul className="lblist">
+                {lb.map((r, i) => {
+                  const buka = openLb === r.memberId;
+                  const key = `${r.memberId}|${lbFrom}|${lbTo}`;
+                  const rows = detail[key] ?? [];
+                  return (
+                    <li key={r.memberId} className="lbitem">
+                      <button
+                        type="button"
+                        className="lbrow"
+                        aria-expanded={buka}
+                        aria-label={`Rincian nilai ${r.nama}, rata-rata ${r.rata2 ?? 'belum ada'}`}
+                        onClick={() => {
+                          setOpenTgl(null);
+                          setOpenLb(buka ? null : r.memberId);
+                        }}
+                      >
+                        <span className="lbrank">{i + 1}</span>
+                        <span className="lbname">{r.nama}</span>
+                        <b>{r.rata2 ?? '—'}</b>
+                        <em>{r.n}x</em>
+                      </button>
+                      <AnimatePresence initial={false}>
+                        {buka && (
+                          <motion.div
+                            className="lbcollapser"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.22, ease: 'easeOut' }}
+                          >
+                            {detailBusy === r.memberId && (
+                              <p className="hint"><span className="spin" aria-hidden="true" /> Memuat rincian…</p>
+                            )}
+                            {detailBusy !== r.memberId && rows.length === 0 && (
+                              <Empty text="Belum ada nilai di rentang ini." />
+                            )}
+                            {rows.map((d) => {
+                              const tkey = `${r.memberId}:${d.tanggal}`;
+                              const tbuka = openTgl === tkey;
+                              const set = new Set(d.rincianKeys);
+                              const groups = BREAKDOWN.map((g, gi) => ({
+                                title: g.title,
+                                done: g.items.filter((_, ii) => set.has(`${gi}:${ii}`)),
+                                total: g.items.length,
+                              }));
+                              return (
+                                <div key={d.tanggal} className="lbdate">
+                                  <button
+                                    type="button"
+                                    className="lbdaterow"
+                                    aria-expanded={tbuka}
+                                    aria-label={`Rincian tugas ${d.tanggal}`}
+                                    onClick={() => setOpenTgl(tbuka ? null : tkey)}
+                                  >
+                                    <span>{d.tanggal}</span>
+                                    <span className="dim">foto {d.foto}/{d.fotoMax}</span>
+                                    <span className="dim">rincian {d.rincian}/{d.rincianMax}</span>
+                                    <span className="dim">lapsit {d.lapsit ? '✓' : '—'}</span>
+                                    <b>{d.nilai}</b>
+                                  </button>
+                                  <AnimatePresence initial={false}>
+                                    {tbuka && (
+                                      <motion.div
+                                        className="lbcollapser"
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: 'auto', opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{ duration: 0.22, ease: 'easeOut' }}
+                                      >
+                                        {groups.map((g) => (
+                                          <div key={g.title} className="lbgroup">
+                                            <b>{g.title}</b>
+                                            {g.done.map((t) => (
+                                              <p key={t} className="hist">✓ {t}</p>
+                                            ))}
+                                            {g.total - g.done.length > 0 && (
+                                              <p className="hint">{g.total - g.done.length} belum</p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </li>
+                  );
+                })}
+              </ul>
             </>
           )}
 
