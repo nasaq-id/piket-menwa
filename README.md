@@ -213,3 +213,17 @@ Opsi lain:
 - Similarity pakai kalibrasi resmi CompreFace (`(tanh((c0 − jarak) × c1) + 1) / 2`, >0.5 disarankan untuk keamanan tinggi).
 
 > ⚠️ Lisensi: model InsightFace di CompreFace untuk **non-komersial / riset** (dipakai untuk pembelajaran anggota Menwa). Kalau aplikasi dijual/dipakai komersial, urus lisensi model dulu.
+
+---
+
+## 📜 Lisensi
+
+Copyright © 2026 nohypelabs.
+
+Kode aplikasi ini dirilis di bawah **[GNU Affero General Public License v3.0 atau yang lebih baru](LICENSE)** (AGPL-3.0-or-later).
+Singkatnya: boleh dipakai, dipelajari, diubah, dan disebarkan — termasuk untuk organisasi lain — **asal** hasil turunannya
+tetap berlisensi AGPL, dan kalau versi yang sudah diubah dijalankan sebagai layanan yang diakses orang lain lewat jaringan,
+kode sumbernya wajib ikut dibuka untuk penggunanya. Tanpa jaminan apa pun. Teks lengkap di [`LICENSE`](LICENSE).
+
+Komponen pihak ketiga tetap mengikuti lisensinya masing-masing — termasuk model wajah InsightFace di CompreFace
+(**non-komersial**, lihat catatan di atas) dan model MiniFASNet di `server/models/` (Apache-2.0).
