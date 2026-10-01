@@ -1,0 +1,16 @@
+[Unit]
+Description=Piket Menwa API (Express, 127.0.0.1:3110) — diakses publik lewat piket-tunnel + nginx VPS
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=%h/apps/piket-menwa
+ExecStart=/usr/local/bin/node --env-file=.env server/index.ts
+Restart=always
+RestartSec=5
+# jaga mini PC: bot Claude & build edura butuh RAM juga
+MemoryHigh=500M
+MemoryMax=700M
+
+[Install]
+WantedBy=default.target

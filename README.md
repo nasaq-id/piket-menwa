@@ -95,6 +95,9 @@ Buka `http://localhost:5173` (kamera butuh HTTPS di HP — pakai tunnel, mis. `c
 | `SUPER_PIN` | — | Default `041294` — dashboard `#super` |
 | `VAPID_PUBLIC` / `VAPID_PRIVATE` | — | Auto-generate ke `server/.vapid.json` bila kosong |
 | `PORT` / `DB_FILE` / `UPLOAD_DIR` | — | Default `3001` / `./dev.db` / `./uploads` |
+| `HOST` | — | Default `0.0.0.0`. Produksi di belakang proxy/tunnel: `127.0.0.1` |
+| `NODE_ENV` | Produksi | `production` → PIN & kunci wajib diset, endpoint lab wajah dimatikan |
+| `CORS_ORIGIN` | — | Daftar origin dipisah koma (produksi: domain app) |
 
 ### 🔌 API (ringkas)
 
@@ -138,6 +141,14 @@ Autentikasi aksi sensitif: identitas member dari sesi login; admin pakai header 
 ---
 
 ## 📦 Deploy
+
+**Produksi sekarang** (https://piket.example.com): API + CompreFace ramping di server rumah, nginx + file statis di VPS,
+dihubungkan tunnel SSH. Update cukup `deploy/deploy.sh` dari laptop (build → kirim kode → restart → kirim frontend). Skrip ini
+**tidak pernah** menimpa `data/` (DB + upload), `.env`, dan `server/.vapid.json` di server. Konfigurasi ada di `deploy/`:
+`compreface/` (cuma db + api + core, tanpa admin/UI), `systemd/` (API + tunnel), `nginx/` (situs + pembatas percobaan PIN).
+Server membaca IP asli dari `X-Forwarded-For` hanya kalau datang dari loopback (`trust proxy`), jadi rate-limit dihitung per pengguna.
+
+Opsi lain:
 
 - **Frontend** → Vercel / static hosting (HTTPS wajib untuk kamera + push).
 - **Jadi APK (TWA)** — PWA ini TWA-ready: `manifest.webmanifest` + icons + service worker. Bungkus pakai Bubblewrap → `.aab` → Play Store ($25 sekali bayar), jangan lupa `assetlinks.json`.

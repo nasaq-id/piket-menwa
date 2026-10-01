@@ -18,6 +18,9 @@ import { allTemplates, loadTemplate, logCheck, saveTemplate } from './face/templ
 import { CompreFaceError } from './face/compreface.ts';
 
 const app = express();
+// Produksi: request datang lewat nginx VPS → tunnel SSH → 127.0.0.1. Percayai X-Forwarded-For hanya dari
+// loopback, supaya req.ip = IP asli pengguna (rate-limit per orang, bukan satu ember untuk semua).
+app.set('trust proxy', 'loopback');
 // CORS dibatasi via env saat produksi; dev tetap terbuka.
 app.use(cors(process.env.CORS_ORIGIN ? { origin: process.env.CORS_ORIGIN.split(',') } : undefined));
 app.use(express.json({ limit: '12mb' })); // foto dikirim sebagai dataURL terkompresi
@@ -1457,4 +1460,5 @@ setInterval(() => {
 }, 60_000);
 
 const port = Number(process.env.PORT ?? 3001);
-app.listen(port, () => console.log(`piket-menwa API :${port} (db=${process.env.DB_FILE ?? './dev.db'})`));
+const host = process.env.HOST ?? '0.0.0.0'; // produksi: 127.0.0.1 (cuma lewat tunnel)
+app.listen(port, host, () => console.log(`piket-menwa API ${host}:${port} (db=${process.env.DB_FILE ?? './dev.db'})`));

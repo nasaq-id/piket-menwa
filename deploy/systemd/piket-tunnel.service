@@ -1,0 +1,13 @@
+[Unit]
+Description=Tunnel KHUSUS piket-menwa: VPS 127.0.0.1:18090 -> mini PC 127.0.0.1:3110 (terpisah dari tunnel-vps.service)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/autossh -M 0 -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o BatchMode=yes -4 -R 127.0.0.1:18090:127.0.0.1:3110 root@VPS_HOST
+Environment=AUTOSSH_GATETIME=0
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

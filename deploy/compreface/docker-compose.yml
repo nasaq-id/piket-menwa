@@ -1,0 +1,46 @@
+# CompreFace RAMPING untuk produksi piket-menwa di mini PC.
+# Cuma 3 container: db + api + core. Admin & UI (≈430 MB) sengaja TIDAK dipasang;
+# API key DETECTION disalin dari CompreFace dev di laptop (pg_dump), jadi admin tak dibutuhkan saat jalan.
+# Kalau suatu saat perlu UI admin: jalankan sementara compose lengkap di infra/compreface/.
+name: piket-cf
+volumes:
+  db-data:
+services:
+  cf-db:
+    image: exadel/compreface-postgres-db:1.2.0
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${CF_DB_PASSWORD}
+      - POSTGRES_DB=frs
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    mem_limit: 192m
+  cf-api:
+    image: exadel/compreface-api:1.2.0
+    restart: unless-stopped
+    depends_on: [cf-db, compreface-core]
+    ports:
+      - "127.0.0.1:8100:8080"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${CF_DB_PASSWORD}
+      - POSTGRES_URL=jdbc:postgresql://cf-db:5432/frs
+      - SPRING_PROFILES_ACTIVE=dev
+      - API_JAVA_OPTS=-Xmx256m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
+      - SAVE_IMAGES_TO_DB=false
+      - MAX_FILE_SIZE=5MB
+      - MAX_REQUEST_SIZE=10MB
+      - CONNECTION_TIMEOUT=10000
+      - READ_TIMEOUT=60000
+    mem_limit: 640m
+  compreface-core:
+    # nama service HARUS "compreface-core": compreface-api memanggil core lewat hostname ini
+    image: exadel/compreface-core:1.2.0-mobilenet
+    restart: unless-stopped
+    environment:
+      - ML_PORT=3000
+      - IMG_LENGTH_LIMIT=640
+      - UWSGI_PROCESSES=1
+      - UWSGI_THREADS=1
+    mem_limit: 768m
