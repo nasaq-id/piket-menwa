@@ -148,6 +148,15 @@ dihubungkan tunnel SSH. Update cukup `deploy/deploy.sh` dari laptop (build → k
 `compreface/` (cuma db + api + core, tanpa admin/UI), `systemd/` (API + tunnel), `nginx/` (situs + pembatas percobaan PIN).
 Server membaca IP asli dari `X-Forwarded-For` hanya kalau datang dari loopback (`trust proxy`), jadi rate-limit dihitung per pengguna.
 
+**APK Android (TWA, sideload — bukan Play Store):** proyek di `android/` (Bubblewrap, package `com.nohypelabs.piketmenwa`).
+Unduh: https://piket.example.com/unduh/piket-menwa.apk (disajikan dari `/var/www/piket-menwa-unduh/` di VPS).
+Verifikasi TWA lewat `public/.well-known/assetlinks.json` (fingerprint keystore). Keystore + password ada di
+`~/.config/piket-menwa/android/` di laptop, **tidak di repo** — hilang = APK baru tidak bisa dipasang menimpa yang lama
+(anggota harus uninstall dulu), jadi wajib dicadangkan. Rilis versi baru: naikkan `appVersionCode`/`appVersion` di
+`android/twa-manifest.json` → `bubblewrap update --skipVersionUpgrade` → `set -a; . ~/.config/piket-menwa/android/keystore.env; set +a;
+bubblewrap build --skipPwaValidation` → salin `app-release-signed.apk` ke VPS sebagai `piket-menwa-<versi>.apk` + arahkan symlink `piket-menwa.apk`.
+Perubahan tampilan/fitur web TIDAK butuh APK baru — TWA selalu memuat versi web terbaru.
+
 Opsi lain:
 
 - **Frontend** → Vercel / static hosting (HTTPS wajib untuk kamera + push).

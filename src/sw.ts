@@ -39,6 +39,7 @@ self.addEventListener('fetch', (e) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/unduh/')) return; // APK sideload: langsung ke jaringan, jangan ikut di-cache
   if (url.pathname.startsWith('/uploads/')) {
     // Foto bukti: cache-first, max 100 file / 30 hari (LRU sederhana).
     e.respondWith(

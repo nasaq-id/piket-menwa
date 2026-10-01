@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.nohypelabs.piketmenwa",
+        "sha256_cert_fingerprints": ["3B:F8:CC:50:95:3E:B0:AC:74:09:D1:20:61:D0:78:EB:4C:9D:8B:B9:F8:74:FE:5D:F0:74:75:B7:F8:60:20:36"]
+      }
+    }]

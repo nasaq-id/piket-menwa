@@ -1,0 +1,11 @@
+# hasil build / cache Gradle
+.gradle/
+build/
+app/build/
+local.properties
+*.apk
+*.aab
+*.idsig
+# keystore TIDAK PERNAH di repo — ada di ~/.config/piket-menwa/android/
+*.keystore
+*.jks
