@@ -461,7 +461,7 @@ button:active { transform:scale(.97); }
 .step.done .steptx span, .step.active .steptx span { color:var(--dim); }
 .stepline { flex:none; align-self:center; width:10px; height:1.5px; background:var(--line); margin:0 2px; }
 .stepline.on { background:var(--accent); }
-.buktiProg { margin:0 0 var(--space-2); }
+.buktiProg { margin:0 12px var(--space-2); } /* sejajar dgn teks petunjuk & daftar tugas di card */
 .tac .stepbg { background:rgba(74,222,128,.08); }
 .tac .step { border-radius:2px; }
 .tac .stepbg { border-radius:2px; }
