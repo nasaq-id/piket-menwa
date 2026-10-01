@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Camera, Check, ChevronDown, Clock, Lock, MapPin, PartyPopper } from 'lucide-react';
+import { Camera, Check, ChevronDown, Lock, MapPin, PartyPopper } from 'lucide-react';
 import { BREAKDOWN } from '../breakdown';
 import { ABSEN_BUKA_MENIT, ABSEN_TELAT_MENIT, dateStr, geserJam } from '../piket';
 import { isOnline } from '../api';
@@ -61,9 +61,8 @@ export function HariTab({ store }: { store: AppStore }) {
         <div className="hero"><b><PartyPopper size={17} /> Libur</b><span>Sabtu–Minggu tidak ada piket.</span></div>
       ) : (
         <div className="hero">
-          <div className="herotop">
-            <em className="pill">hari ini</em>
-            <span className="hday">{today}</span>
+          <div className="herojam" aria-label={`Piket ${jamMulai} sampai ${jamSelesai}`}>
+            <b>{jamMulai}</b><span className="jarrow">→</span><b>{jamSelesai}</b>
           </div>
           <div className="heroatt">
             {crew.map((id) => {
@@ -82,13 +81,7 @@ export function HariTab({ store }: { store: AppStore }) {
                 </div>
               );
             })}
-            {crew.length === 0 && <span className="hint">Belum ada jadwal.</span>}
-          </div>
-          <div className="herojam">
-            <Clock size={14} />
-            <span className="jlabel">Mulai</span><b>{(jamHari.split('–')[0] ?? '').trim()}</b>
-            <span className="jarrow">→</span>
-            <span className="jlabel">Selesai</span><b>{(jamHari.split('–')[1] ?? '').trim()}</b>
+            {crew.length === 0 && <span className="hint">Belum ada petugas dijadwalkan.</span>}
           </div>
         </div>
       )}
@@ -139,7 +132,7 @@ export function HariTab({ store }: { store: AppStore }) {
                 </Button>
                 {jamMulai && (
                   <p className="hint">
-                    Absen dibuka {geserJam(jamMulai, -ABSEN_BUKA_MENIT)}–{jamSelesai}. Lewat {geserJam(jamMulai, ABSEN_TELAT_MENIT)} tercatat terlambat. Wajib di area mako (markas komando, GPS aktif).
+                    Buka {geserJam(jamMulai, -ABSEN_BUKA_MENIT)}–{jamSelesai} · lewat {geserJam(jamMulai, ABSEN_TELAT_MENIT)} terlambat · di area mako, GPS aktif. Bukti &amp; lapsit terbuka setelah absen.
                   </p>
                 )}
               </motion.div>
@@ -157,7 +150,7 @@ export function HariTab({ store }: { store: AppStore }) {
           </div>
           <div className="bdgroup anchor" id="sec-bukti">
             <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)} aria-expanded={buktiOpen}>
-              <span>Bukti Piket (Wajib)</span>
+              <span>Bukti piket · wajib</span>
               <em>{ev.length}/{checks.length}</em>
               <ChevronDown size={16} className={buktiOpen ? 'rot' : ''} />
             </button>
@@ -175,7 +168,6 @@ export function HariTab({ store }: { store: AppStore }) {
                       <i style={{ width: `${(doneCount / checks.length) * 100}%` }} />
                     </div>
                   )}
-                  {!unlocked && <p className="hint"><Lock size={12} /> Absen dulu untuk membuka bukti.</p>}
                   <ul className="tasks">
                     {checks.map((c) => {
                       const ph = ev.find((e) => e.tugas === c.judul);
@@ -208,7 +200,7 @@ export function HariTab({ store }: { store: AppStore }) {
                           >
                             {c.judul}
                           </button>
-                          <span className={`box ${c.done ? 'on' : ''}`}>{c.done ? <Check size={13} /> : ''}</span>
+                          {c.done ? <Check size={15} className="donecheck" aria-hidden="true" /> : null}
                         </li>
                       );
                     })}
@@ -217,14 +209,14 @@ export function HariTab({ store }: { store: AppStore }) {
                     ref={photoRef} type="file" accept="image/*" capture="environment" hidden
                     onChange={(e) => { void onFile(pendingTugas ?? '', e.target.files?.[0]); e.target.value = ''; }}
                   />
-                  <p className="hint">1 tugas = 1 foto milikmu sendiri, tercentang otomatis saat foto terkirim. Foto yang sudah terkirim tidak bisa diganti. {ev.length}/{checks.length} berfoto.</p>
+                  <p className="hint">1 foto per tugas, milikmu sendiri · tidak bisa diganti setelah terkirim.</p>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
           <div className="bdgroup top">
             <button className="bdhead" onClick={() => setBdSecOpen((v) => !v)} aria-expanded={bdSecOpen}>
-              <span>Rincian Tugas (Opsional · Ikut nilai)</span>
+              <span>Rincian tugas · opsional, ikut nilai</span>
               <em>{bdDone.length}/{BREAKDOWN.reduce((s, g) => s + g.items.length, 0)}</em>
               <ChevronDown size={16} className={bdSecOpen ? 'rot' : ''} />
             </button>
@@ -292,7 +284,7 @@ export function HariTab({ store }: { store: AppStore }) {
             )}
           </AnimatePresence>
           <div id="sec-lapsit" className="anchor">
-          <h2>Catatan Lapsit (laporan situasi) — Akhir Piket</h2>
+          <h2>Lapsit · laporan akhir piket</h2>
           {myLapsitSent ? (
             lapsit.map((l) => (
               <div key={l.id} className="card sm">

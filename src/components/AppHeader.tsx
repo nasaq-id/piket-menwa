@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Tab } from '../hooks/useAppStore';
 
 const tabTitle: Record<Tab, string> = {
-  hari: 'Jadwal Piket Hari Ini',
+  hari: 'Hari Ini',
   minggu: 'Jadwal Mingguan',
   tukar: 'Tukar Jadwal',
 };

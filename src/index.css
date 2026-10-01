@@ -87,7 +87,7 @@ body { margin:0; background:#070a09; color:var(--ink); font-family: system-ui,-a
 .pinmsg.err { color:var(--danger); }
 /* ---- Tactical HUD (eksperimen halaman register) ---- */
 .welcome.tac { font-family:ui-monospace, Menlo, Consolas, monospace; border:1px solid rgba(74,222,128,.25); border-radius:var(--radius); background:repeating-linear-gradient(0deg, rgba(74,222,128,.03) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 0%, rgba(74,222,128,.08), transparent 60%), var(--bg); }
-.tac h1 { color:var(--accent); text-transform:uppercase; letter-spacing:2px; font-size:20px; }
+.welcome.tac h1 { color:var(--accent); text-transform:uppercase; letter-spacing:2px; font-size:20px; }
 /* Kursor berkedip: hanya judul halaman login (fase 5). */
 .welcome--login .wtitle::after { content:'_'; animation:blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity:0; } }
@@ -349,65 +349,105 @@ button:active { transform:scale(.97); }
 .tabs button { flex:1; background:none; border:1.5px solid transparent; border-radius:12px; color:var(--dim); font-size:20px; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer; padding:8px 4px; }
 .tabs button span { font-size:11px; }
 .tabs button.on { color:var(--ink); border-color:var(--accent); }
-/* ================= TACTICAL HUD GLOBAL ================= */
+/* ================= TACTICAL HUD GLOBAL (v2: lebih kalem) =================
+   Prinsip: hijau = SINYAL (aksi utama, aktif, status ok, progress), bukan hiasan.
+   Monospace hanya untuk DATA (jam, tanggal, angka, penghitung); teks biasa sans.
+   Huruf kapital hanya untuk label kecil. Border tipis; pemisah utama = lapisan warna. */
 .phone.tac {
-  --bg:#070b09; --card:#0a100d; --line:rgba(74,222,128,.28);
-  --ink:#d7f5e3; --dim:#5e8a73; --accent:#4ade80; --on-accent:#04120a; --radius:2px;
-  font-family:ui-monospace, Menlo, Consolas, monospace;
-  background:
-    repeating-linear-gradient(0deg, rgba(74,222,128,.025) 0 1px, transparent 1px 3px),
-    radial-gradient(ellipse at 50% 0%, rgba(74,222,128,.07), transparent 60%),
-    var(--bg);
+  --bg:#070b09; --card:#0b120e; --raised:#0f1813;
+  --ink:#d7f5e3; --dim:#7f9d8c; --faint:#56705f;
+  --accent:#4ade80; --on-accent:#04120a; --radius:4px;
+  --line-subtle:rgba(74,222,128,.08); --line:rgba(74,222,128,.16); --line-strong:rgba(74,222,128,.55);
+  --accent-soft:rgba(74,222,128,.10);
+  --mono:ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  background:radial-gradient(ellipse at 50% 0%, rgba(74,222,128,.06), transparent 55%), var(--bg);
+  border-color:var(--line-subtle);
 }
-.tac h1, .tac h2, .tac .sec { text-transform:uppercase; letter-spacing:1.5px; color:var(--accent); }
-.tac .hd h1 { font-size:17px; }
-.tac .hd { border-color:rgba(74,222,128,.35); }
+.tac button, .tac input, .tac select, .tac textarea { font-family:inherit; }
+.tac h1 { color:var(--ink); letter-spacing:0; }
+.tac h2, .tac .sec {
+  font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:1.6px;
+  text-transform:uppercase; color:var(--faint); margin:22px 0 8px;
+}
+.tac .hd { border-color:var(--line-subtle); }
+.tac .hd h1, .tac .hdtitle h1 { font-size:17px; font-weight:650; }
+.tac .hd p, .tac .hdtitle p { font-family:var(--mono); font-size:11px; letter-spacing:.3px; }
 .tac .tgl, .tac .hint, .tac .besok, .tac .hist { color:var(--dim); }
+.tac .tgl { font-family:var(--mono); font-size:11.5px; letter-spacing:1.2px; text-transform:uppercase; color:var(--faint); }
+
+/* tombol: satu primer solid, sisanya tenang */
 .tac button.primary, .tac .bigbtn, .tac .wbtn {
-  background:var(--accent); color:var(--on-accent); border:none; border-radius:2px;
-  text-transform:uppercase; letter-spacing:1.5px; font-family:inherit;
+  background:var(--accent); color:var(--on-accent); border:none; border-radius:var(--radius); font-weight:650;
 }
 .tac .card button:not(.primary), .tac .ghostbtn,
 .tac .suphead button, .tac .super .row button:not(.primary) {
-  background:transparent; color:var(--accent); border:1px solid rgba(74,222,128,.5);
-  border-radius:2px; font-family:inherit; text-transform:uppercase; letter-spacing:1px;
+  background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:var(--radius);
 }
+
+/* permukaan: lapisan warna, border tipis */
 .tac .card, .tac .dayrow, .tac .hero, .tac .attrow, .tac .facerow,
 .tac .waitcard, .tac .camcard, .tac .pvcard, .tac .supcard,
 .tac .bdgroup, .tac .swaplog, .tac .opt, .tac .jamrow, .tac .picklist {
-  border-radius:2px; border-color:rgba(74,222,128,.3);
+  border-radius:var(--radius); border-color:var(--line);
 }
-.tac .chip, .tac .pill, .tac .badge-ok, .tac .badge-no, .tac .ketua { border-radius:2px; font-family:inherit; }
-.tac .pill, .tac .badge-ok { background:rgba(74,222,128,.15); color:var(--accent); }
+.tac .card, .tac .bdgroup, .tac .waitcard, .tac .supcard { background:var(--card); }
+.tac .bdhead { background:transparent; }
+.tac .bdhead em { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+.tac .chip, .tac .pill, .tac .badge-ok, .tac .badge-no, .tac .ketua { border-radius:var(--radius); }
+.tac .badge-ok, .tac .badge-no { font-family:var(--mono); font-weight:500; }
+.tac .pill, .tac .badge-ok { background:var(--accent-soft); color:var(--accent); }
+
+/* input: teks putih, bukan hijau; fokus = border hijau tanpa glow */
 .tac input, .tac select, .tac textarea {
-  background:#0a0f0d; border:1px solid rgba(74,222,128,.4); color:var(--accent);
-  border-radius:2px; font-family:inherit;
+  background:var(--raised); border:1px solid var(--line); color:var(--ink); border-radius:var(--radius);
 }
-.tac input::placeholder, .tac textarea::placeholder { color:rgba(74,222,128,.6); }
-.tac input:focus, .tac select:focus, .tac textarea:focus {
-  outline:none; border-color:var(--accent); box-shadow:0 0 8px rgba(74,222,128,.35);
-}
-.tac .box { border-radius:2px; border-color:#5e8a73; }
+.tac input::placeholder, .tac textarea::placeholder { color:var(--faint); }
+.tac input:focus, .tac select:focus, .tac textarea:focus { outline:none; border-color:var(--accent); }
+
+.tac .box { border-radius:3px; border-color:var(--faint); }
 .tac .box.on { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
-.tac .tabs { border-top:1px solid rgba(74,222,128,.35); background:rgba(7,11,9,.97); }
-.tac .tabs button { border-radius:2px; font-family:inherit; text-transform:uppercase; }
-.tac .tabs button.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
-.tac .tasks li { border-color:rgba(74,222,128,.18); }
-.tac .tasks li .cam { border-radius:2px; }
-.tac .progress { background:rgba(74,222,128,.15); }
+
+/* tab bawah: aktif = ikon/teks hijau + garis tipis, bukan blok */
+.tac .tabs { border-top:1px solid var(--line-subtle); background:rgba(7,11,9,.97); }
+.tac .tabs button { border:none; border-radius:0; position:relative; color:var(--faint); }
+.tac .tabs button.on { background:transparent; color:var(--accent); }
+.tac .tabs button.on::before { content:""; position:absolute; top:-10px; left:30%; right:30%; height:2px; border-radius:2px; background:var(--accent); }
+
+.tac .tasks li { border-color:var(--line-subtle); }
+.tac .tasks li .cam { border:1px solid var(--line); border-radius:var(--radius); background:var(--raised); }
+.tac .progress { background:var(--line-subtle); }
 .tac .progress i { background:var(--accent); }
 .tac .dayrow.now { outline-color:var(--accent); }
-.tac .opt.sel { border-color:var(--accent); background:rgba(74,222,128,.1); }
-.tac .suptable th, .tac .suptable td { border-color:rgba(74,222,128,.2); }
-.tac .evthumbs img, .tac .camview video, .tac .pvcard img, .tac .dayph img { border-radius:2px; }
-.tac .ava, .tac .hdavatar, .tac .sheetava { border-radius:4px; }
-.tac .sheet { border-radius:0; border-color:rgba(74,222,128,.4); }
-.tac .sheet .danger { border-radius:2px; font-family:inherit; text-transform:uppercase; letter-spacing:1.5px; }
-.tac .rotbtn { border-radius:2px; font-family:inherit; text-transform:uppercase; letter-spacing:1px; }
-.tac .weeknav button { border-radius:2px; }
-.tac .dedit .x, .tac .facerow button, .tac .supdel, .tac .addbtn { border-radius:2px; font-family:inherit; }
+.tac .opt.sel { border-color:var(--accent); background:var(--accent-soft); }
+.tac .suptable th, .tac .suptable td { border-color:var(--line-subtle); }
+.tac .evthumbs img, .tac .camview video, .tac .pvcard img, .tac .dayph img { border-radius:var(--radius); }
+.tac .ava, .tac .hdavatar, .tac .sheetava { border-radius:6px; }
+.tac .hdavatar { border-color:var(--line); }
+.tac .sheet { border-radius:0; border-color:var(--line); }
+.tac .sheet .danger, .tac .rotbtn, .tac .weeknav button,
+.tac .dedit .x, .tac .facerow button, .tac .supdel, .tac .addbtn { border-radius:var(--radius); }
 .tac .wbtn.ghost, .tac .wlink { color:var(--accent); }
-.tac .wlogo { border-color:rgba(74,222,128,.4); }
+.tac .wlogo { border-color:var(--line); }
+.tac .onlinedot { box-shadow:0 0 0 3px var(--accent-soft); }
+
+/* kartu shift Hari Ini = satu-satunya "tanda HUD": siku sudut + jam besar monospace */
+.tac .hero { position:relative; border:none; background:var(--card); padding:16px; gap:12px; }
+.tac .hero::before, .tac .hero::after { content:""; position:absolute; width:12px; height:12px; border:0 solid var(--line-strong); pointer-events:none; }
+.tac .hero::before { top:0; left:0; border-width:1.5px 0 0 1.5px; }
+.tac .hero::after { bottom:0; right:0; border-width:0 1.5px 1.5px 0; }
+.tac .herojam { border:none; padding:0; gap:10px; align-items:baseline; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.tac .herojam b { font-size:32px; font-weight:600; letter-spacing:-.5px; color:var(--ink); }
+.tac .herojam .jarrow { font-size:15px; color:var(--faint); }
+.tac .heroatt .attrow.ghost { border:none; border-radius:0; padding:8px 0; background:transparent; }
+.tac .heroatt .attrow.ghost + .attrow.ghost { border-top:1px solid var(--line-subtle); }
+
+/* stepper & tombol tak lagi kapital/monospace semua */
+.tac .btn { font-family:inherit; text-transform:none; letter-spacing:0; }
+.tac .btn--secondary { background:transparent; color:var(--ink); border-color:var(--line); }
+.tac .btn--ghost { color:var(--accent); }
+.tac .steptx span { font-family:var(--mono); font-variant-numeric:tabular-nums; }
 
 /* Login NBP/WA + PIN/password, pilihan PIN vs password */
 .loginform { display:flex; flex-direction:column; gap:10px; width:100%; margin-top:14px; overflow:hidden; }
@@ -441,8 +481,6 @@ button:active { transform:scale(.97); }
 .btn--icon { padding:0; }
 .btn--primary .spin, .btn--danger .spin { border-color:rgba(0,0,0,.25); border-top-color:currentColor; }
 .sheet .btn, .pinrow .btn { width:100%; }
-.tac .btn { font-family:inherit; text-transform:uppercase; letter-spacing:1px; }
-.tac .btn--secondary { background:transparent; color:var(--accent); border-color:rgba(74,222,128,.5); }
 .tac .btn--ghost { color:var(--accent); }
 
 /* ---- Stepper piket fase 2: Absen → Bukti → Lapsit ---- */
@@ -493,7 +531,7 @@ button:active { transform:scale(.97); }
 .presrow { display:inline-flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; }
 .offlinedot { width:9px; height:9px; border-radius:99px; background:var(--dim); flex:none; }
 .tac .suptabs { border-radius:var(--radius); background:rgba(7,11,9,.97); }
-.tac .suptab { border-radius:var(--radius); text-transform:uppercase; letter-spacing:1px; }
+.tac .suptab { border-radius:var(--radius); }
 .tac .suptabind { border-radius:var(--radius); background:rgba(74,222,128,.08); }
 
 /* ---- Fase 7: ganti style={{…}} statis dgn class token (dinamis: warna/warna-progress biarkan inline) ---- */
@@ -529,3 +567,5 @@ button:active { transform:scale(.97); }
 .lbdaterow { width:100%; min-height:44px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:none; border:none; color:inherit; font:inherit; font-size:12px; cursor:pointer; padding:10px 12px; text-align:left; }
 .lbgroup { padding:4px 12px 10px; font-size:13px; }
 .lbgroup b { display:block; margin:8px 0 2px; font-size:13px; }
+/* bukti: centang kecil menggantikan checkbox (foto sudah jadi tandanya) */
+.tasks li .donecheck { color:var(--accent); flex:none; }
