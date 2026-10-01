@@ -6,7 +6,8 @@ declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: { url: string; revision: string | null }[];
 };
 
-const PRECACHE = 'precache-v1';
+// v2: v1 sempat ikut menyimpan respons /api/* (cache-first) → data basi; ganti nama supaya cache lama terhapus saat activate.
+const PRECACHE = 'precache-v2';
 const PAGES = 'pages';
 const EVIDENCE = 'evidence';
 
@@ -40,6 +41,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/unduh/')) return; // APK sideload: langsung ke jaringan, jangan ikut di-cache
+  // Data API JANGAN dilayani dari cache SW — selalu ke server. Fallback offline sudah diurus src/api.ts (localStorage).
+  if (url.pathname.startsWith('/api/')) return;
   if (url.pathname.startsWith('/uploads/')) {
     // Foto bukti: cache-first, max 100 file / 30 hari (LRU sederhana).
     e.respondWith(
