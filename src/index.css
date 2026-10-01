@@ -284,6 +284,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 .bdhead svg.rot { transform:rotate(180deg); }
 .bdgroup .tasks { padding:0 12px 6px; margin:0; }
 .bdgroup .tasks li:last-child { border-bottom:none; }
+/* teks petunjuk di dalam card sejajar dengan daftar tugas (tidak menempel ke border) */
+.bdgroup > .collapser > .hint { padding:0 12px; }
 .waitcard { display:flex; gap:10px; align-items:center; border:1px solid var(--line); border-radius:13px; padding:12px; margin-bottom:8px; font-size:13px; }
 .bigbtn + .waitcard { margin-top:10px; }
 .ketua { margin-left:auto; background:rgba(251,191,36,.15); color:var(--warning); border:none; border-radius:8px; padding:6px 10px; font-size:11px; font-weight:700; font-style:normal; cursor:pointer; white-space:nowrap; }
