@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Deploy piket-menwa dari laptop:
 #   API  -> mini PC  ~/apps/piket-menwa  (systemd user: piket-menwa, piket-tunnel; CompreFace: deploy/compreface)
-#   Web  -> VPS VPS_HOST /var/www/piket-menwa (nginx), dikirim lewat mini PC
-# Publik: https://piket.example.com
+#   Web  -> VPS /var/www/piket-menwa (nginx), dikirim lewat mini PC
+# Domain & alamat VPS dibaca dari deploy/deploy.env (lokal, di-gitignore) — salin dari deploy.env.example.
 # Yang TIDAK PERNAH ditimpa/dihapus di mini PC: data/ (DB + uploads), .env, server/.vapid.json, deploy/compreface/.env
 set -euo pipefail
 cd "$(dirname "$0")/.."
-URL=https://piket.example.com
+[ -f deploy/deploy.env ] || { echo "deploy/deploy.env belum ada — salin dari deploy/deploy.env.example lalu isi."; exit 1; }
+. deploy/deploy.env   # APP_URL, VPS_SSH
+URL="$APP_URL"
 
 echo "==> build frontend"
 pnpm build
@@ -26,7 +28,7 @@ ssh minipc 'cd ~/apps/piket-menwa && npx -y pnpm@11.24.0 install --prod --frozen
 
 echo "==> kirim frontend ke VPS"
 rsync -a --delete dist/ minipc:apps/piket-menwa/dist/
-ssh minipc 'rsync -a --delete ~/apps/piket-menwa/dist/ root@VPS_HOST:/var/www/piket-menwa/' </dev/null
+ssh minipc "rsync -a --delete ~/apps/piket-menwa/dist/ ${VPS_SSH}:/var/www/piket-menwa/" </dev/null
 
 echo "==> cek publik"
 curl -sf "$URL/api/health" && echo && curl -s -o /dev/null -w "web: %{http_code}\n" "$URL/"

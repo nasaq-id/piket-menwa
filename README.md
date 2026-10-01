@@ -4,7 +4,7 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 
 > Frontend PWA (installable, offline-ready) + APK Android (TWA, sideload) + backend Express + SQLite via Drizzle (siap migrasi ke Supabase Postgres).
 >
-> **Live:** https://piket.example.com · **APK Android terbaru:** https://github.com/nohypelabs/piket-menwa/releases/latest/download/piket-menwa.apk
+> **APK Android terbaru:** https://github.com/nohypelabs/piket-menwa/releases/latest/download/piket-menwa.apk
 
 ---
 
@@ -154,8 +154,8 @@ Autentikasi aksi sensitif: identitas member dari sesi login + token wajah harian
 │   └── models/           # MiniFASNet ONNX
 ├── db/                   # skema Drizzle (SQLite + mirror Postgres), crypto AES-GCM, master nilai
 ├── public/               # aset PWA, brand, .well-known/assetlinks.json (verifikasi TWA)
-├── android/              # proyek TWA Bubblewrap (twa-manifest.json)
-├── deploy/               # deploy.sh + config produksi (compose CompreFace ramping, systemd, nginx)
+├── android/              # TWA Bubblewrap: twa-manifest.example.json (proyek hasil generate tidak di-commit)
+├── deploy/               # deploy.sh + deploy.env.example + contoh config produksi (CompreFace ramping, systemd, nginx)
 ├── infra/compreface/     # compose CompreFace lengkap untuk dev (termasuk UI admin)
 └── scripts/              # gen-icons.py, face-check.ts
 ```
@@ -164,19 +164,22 @@ Autentikasi aksi sensitif: identitas member dari sesi login + token wajah harian
 1. Timpa `public/brand/logo-menwa.png` dengan logo sendiri.
 2. `python3 scripts/gen-icons.py` → ikon home-screen, splash, favicon ke-regenerate.
 3. Sesuaikan nama di `index.html` + `vite.config.ts` (manifest) + petugas piket/bobot di seed.
-4. Untuk APK: ganti `packageId`, `host`, dan nama di `android/twa-manifest.json`, buat keystore sendiri, perbarui `public/.well-known/assetlinks.json`.
+4. Untuk APK: salin `android/twa-manifest.example.json` → `twa-manifest.json`, ganti `packageId`, `host`, dan nama, buat keystore sendiri, perbarui `public/.well-known/assetlinks.json`.
 
 ---
 
 ## 📦 Deploy
 
-**Produksi sekarang** (https://piket.example.com): API + CompreFace ramping di server rumah, nginx + file statis di VPS,
-dihubungkan tunnel SSH. Update cukup `deploy/deploy.sh` (build → kirim kode → restart → kirim frontend). Skrip ini
+**Produksi sekarang:** API + CompreFace ramping di server rumah, nginx + file statis di VPS,
+dihubungkan tunnel SSH. Domain & alamat VPS **tidak disimpan di repo** — isi `deploy/deploy.env` (salin dari `deploy.env.example`;
+file config nginx/systemd di `deploy/` memakai placeholder `piket.example.com` / `VPS_HOST`). Update cukup `deploy/deploy.sh` (build → kirim kode → restart → kirim frontend). Skrip ini
 **tidak pernah** menimpa `data/` (DB + upload), `.env`, dan `server/.vapid.json` di server. Konfigurasi ada di `deploy/`:
 `compreface/` (cuma db + api + core, tanpa admin/UI — hemat ~430 MB RAM), `systemd/` (API + tunnel), `nginx/` (situs, unduhan APK, pembatas percobaan PIN).
 Server membaca IP asli dari `X-Forwarded-For` hanya kalau datang dari loopback (`trust proxy`), jadi rate-limit dihitung per pengguna.
 
-**APK Android (TWA, sideload — bukan Play Store):** proyek di `android/` (Bubblewrap, package `com.nohypelabs.piketmenwa`).
+**APK Android (TWA, sideload — bukan Play Store):** Bubblewrap, package `com.nohypelabs.piketmenwa`. Di repo cuma ada
+`android/twa-manifest.example.json`; salin jadi `android/twa-manifest.json`, isi domain asli, lalu `bubblewrap update` untuk
+membuat proyek Android-nya (hasil generate & manifest asli di-gitignore).
 - Unduh versi terbaru (link tetap): https://github.com/nohypelabs/piket-menwa/releases/latest/download/piket-menwa.apk — butuh Google Chrome di HP.
 - Verifikasi TWA lewat `public/.well-known/assetlinks.json` (fingerprint keystore).
 - Keystore + password **tidak di repo**. Hilang = APK baru tidak bisa dipasang menimpa yang lama (anggota harus uninstall dulu) — wajib dicadangkan.

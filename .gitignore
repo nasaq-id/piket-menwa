@@ -35,3 +35,11 @@ server/.vapid.json
 face-lab-log.jsonl
 # contoh env tanpa rahasia boleh masuk git
 !.env.example
+
+# nilai produksi (domain, alamat VPS) — lokal saja
+deploy/deploy.env
+# proyek Android hasil generate Bubblewrap + twa-manifest.json asli (berisi domain produksi) — lokal saja.
+# Yang di-commit cuma android/twa-manifest.example.json.
+android/*
+!android/.gitignore
+!android/twa-manifest.example.json
