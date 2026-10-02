@@ -8,7 +8,7 @@ import webpush from 'web-push';
 import { db } from '../db/client.ts';
 import { attendance, evidence, faces, lapsit, members, pushSubs, roster, swaps, tasks, breakdown } from '../db/schema.sqlite.ts';
 import {
-  attestIssued, settings, tugasMaster,
+  attestIssued, pinGuard, settings, tugasMaster,
 } from '../db/schema.sqlite.ts';
 import { detectFaces, similarity } from './face/compreface.ts';
 import { livenessScore } from './face/liveness.ts';
@@ -102,12 +102,7 @@ const requireSuper = (
   res: import('express').Response,
   next: import('express').NextFunction,
 ) => {
-  const got = req.header('x-super-pin') ?? '';
-  const a = Buffer.from(got);
-  const b = Buffer.from(SUPER_PIN);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return void res.status(403).json({ error: 'butuh PIN superadmin' });
-  }
+  if (!headerPinOk(req, 'super')) return void res.status(403).json({ error: 'butuh PIN superadmin' });
   next();
 };
 
@@ -116,8 +111,21 @@ const todayLocal = () => {
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 };
 
-app.post('/api/super/verify', (req, res) => {
-  res.json({ ok: pinEq(req.body?.pin, SUPER_PIN) });
+app.post('/api/super/verify', rateLimit(20, 60_000), (req, res) => verifyPinRoute(req, res, 'super'));
+
+// Daftar akun/IP yang sedang diblokir karena salah PIN, + buka blokir manual.
+app.get('/api/super/pin-blocks', requireSuper, (_req, res) => {
+  const now = Date.now();
+  const nama = new Map(db.select({ id: members.id, nama: members.nama }).from(members).all().map((m) => [m.id, m.nama]));
+  const rows = db.select().from(pinGuard).all()
+    .filter((r) => (r.blockedUntil ?? 0) > now)
+    .map((r) => ({ ...r, nama: r.memberId ? nama.get(r.memberId) ?? r.memberId : null }))
+    .sort((a, b) => (b.blockedUntil ?? 0) - (a.blockedUntil ?? 0));
+  res.json(rows);
+});
+app.delete('/api/super/pin-blocks/:key', requireSuper, (req, res) => {
+  db.delete(pinGuard).where(eq(pinGuard.key, req.params.key)).run();
+  res.json({ ok: true });
 });
 
 app.get('/api/super/overview', requireSuper, (_req, res) => {
@@ -160,12 +168,7 @@ app.get('/api/super/feed', requireSuper, (req, res) => {
   res: import('express').Response,
   next: import('express').NextFunction,
 ) => {
-  const got = req.header('x-admin-pin') ?? '';
-  const a = Buffer.from(got);
-  const b = Buffer.from(ADMIN_PIN);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return void res.status(403).json({ error: 'butuh PIN Admin' });
-  }
+  if (!headerPinOk(req, 'admin')) return void res.status(403).json({ error: 'butuh PIN Admin' });
   next();
 };
 
@@ -175,6 +178,82 @@ const pinEq = (got: unknown, expected: string): boolean => {
   const a = Buffer.from(got);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+};
+
+// ---- Proteksi salah PIN admin/superadmin ----
+// 5× salah → blokir 1 jam. Member yang sedang login dihitung per akun dan
+// sesinya dicabut (auto logout, login ditolak sampai blokir habis); tanpa
+// login dihitung per IP. Superadmin bisa buka blokir lebih cepat.
+const PIN_MAX_FAIL = 5;
+const PIN_BLOCK_MS = 60 * 60_000;
+type PinKind = 'admin' | 'super';
+type PinWho = { key: string; memberId: string | null; ip: string };
+const PIN_ENV: Record<PinKind, () => string> = { admin: () => ADMIN_PIN, super: () => SUPER_PIN };
+const PIN_HEADER: Record<PinKind, string> = { admin: 'x-admin-pin', super: 'x-super-pin' };
+
+const pinWho = (req: import('express').Request, memberId?: unknown, attest?: unknown): PinWho => {
+  const ip = req.ip ?? 'x';
+  if (typeof memberId === 'string' && memberId && checkAttest(attest, memberId, todayLocal())) {
+    return { key: `m:${memberId}`, memberId, ip };
+  }
+  return { key: `ip:${ip}`, memberId: null, ip };
+};
+// Waktu akhir blokir yang masih aktif untuk key ini, atau null.
+const activeBlock = (key: string): number | null => {
+  const r = db.select().from(pinGuard).where(eq(pinGuard.key, key)).all()[0];
+  return r?.blockedUntil && r.blockedUntil > Date.now() ? r.blockedUntil : null;
+};
+const jamBlok = (t: number) => {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
+};
+const blockedMsg = (until: number) =>
+  `Salah PIN ${PIN_MAX_FAIL}× — akun diblokir sampai pukul ${jamBlok(until)}. Hubungi developer kalau perlu dibuka lebih cepat.`;
+// Catat satu kali salah. Hitungan lama (>1 jam sejak percobaan terakhir) dimulai dari 0.
+const pinFail = (who: PinWho, kind: PinKind): { until: number } | { sisa: number } => {
+  const now = Date.now();
+  const r = db.select().from(pinGuard).where(eq(pinGuard.key, who.key)).all()[0];
+  const fails = (r && now - r.lastAt < PIN_BLOCK_MS ? r.fails : 0) + 1;
+  const blockedUntil = fails >= PIN_MAX_FAIL ? now + PIN_BLOCK_MS : null;
+  const row = { key: who.key, memberId: who.memberId, ip: who.ip, fails, blockedUntil, lastAt: now, lastKind: kind };
+  db.insert(pinGuard).values(row).onConflictDoUpdate({ target: pinGuard.key, set: row }).run();
+  if (!blockedUntil) return { sisa: PIN_MAX_FAIL - fails };
+  // Auto logout: cabut atestasi hari ini → semua aksi member tsb ditolak.
+  if (who.memberId) db.delete(attestIssued).where(eq(attestIssued.memberId, who.memberId)).run();
+  return { until: blockedUntil };
+};
+// Login ditolak selama akun diblokir (cek di semua jalur login).
+const loginBlocked = (res: import('express').Response, memberId: string): boolean => {
+  const until = activeBlock(`m:${memberId}`);
+  if (until) res.status(423).json({ error: blockedMsg(until), blocked: true, until });
+  return !!until;
+};
+
+// POST /api/{admin,super}/verify — body { pin, memberId?, attest? }.
+const verifyPinRoute = (req: import('express').Request, res: import('express').Response, kind: PinKind) => {
+  const { pin, memberId, attest } = (req.body ?? {}) as { pin?: unknown; memberId?: unknown; attest?: unknown };
+  const who = pinWho(req, memberId, attest);
+  const until = activeBlock(who.key);
+  if (until) return void res.status(423).json({ ok: false, blocked: true, until, error: blockedMsg(until) });
+  if (pinEq(pin, PIN_ENV[kind]())) {
+    db.delete(pinGuard).where(eq(pinGuard.key, who.key)).run();
+    return void res.json({ ok: true });
+  }
+  const f = pinFail(who, kind);
+  if ('until' in f) return void res.status(423).json({ ok: false, blocked: true, until: f.until, error: blockedMsg(f.until) });
+  res.json({ ok: false, sisa: f.sisa });
+};
+
+// PIN lewat header (x-admin-pin / x-super-pin) ikut dihitung per IP, supaya
+// endpoint lain tidak jadi jalan pintas brute-force. Header kosong = bukan admin.
+const headerPinOk = (req: import('express').Request, kind: PinKind): boolean => {
+  const got = req.header(PIN_HEADER[kind]);
+  if (!got) return false;
+  const who = pinWho(req);
+  if (activeBlock(who.key)) return false;
+  if (pinEq(got, PIN_ENV[kind]())) return true;
+  pinFail(who, kind);
+  return false;
 };
 
 // ---- atestasi wajah: bukti lolos face-match hari ini ----
@@ -201,9 +280,7 @@ const issueAttest = (memberId: string, tanggal: string): string => {
   return attestToken(memberId, tanggal);
 };
 
-app.post('/api/admin/verify', (req, res) => {
-  res.json({ ok: pinEq(req.body?.pin, ADMIN_PIN) });
-});
+app.post('/api/admin/verify', rateLimit(20, 60_000), (req, res) => verifyPinRoute(req, res, 'admin'));
 
 // ---- bootstrap: semua state dalam 1 call ----
 app.get('/api/state', (_req, res) => {
@@ -342,7 +419,7 @@ app.post('/api/swaps/:id/decide', (req, res) => {
   const row = db.select().from(swaps).where(eq(swaps.id, req.params.id)).all()[0];
   if (!row) return void res.status(404).json({ error: 'swap tidak ditemukan' });
   if (row.status !== 'pending') return void res.status(400).json({ error: 'sudah diputuskan' });
-  const isAdmin = pinEq(req.header('x-admin-pin'), ADMIN_PIN);
+  const isAdmin = headerPinOk(req, 'admin');
   if (!isAdmin && by !== row.target) {
     return void res.status(403).json({ error: 'hanya yang diminta / Admin' });
   }
@@ -370,7 +447,7 @@ app.post('/api/swaps/:id/cancel', (req, res) => {
   const row = db.select().from(swaps).where(eq(swaps.id, req.params.id)).all()[0];
   if (!row) return void res.status(404).json({ error: 'swap tidak ditemukan' });
   if (row.status !== 'pending') return void res.status(400).json({ error: 'sudah diputuskan' });
-  const isAdmin = pinEq(req.header('x-admin-pin'), ADMIN_PIN);
+  const isAdmin = headerPinOk(req, 'admin');
   if (!isAdmin && by !== row.requester) {
     return void res.status(403).json({ error: 'hanya pemohon / Admin' });
   }
@@ -792,6 +869,7 @@ app.post('/api/login/credential', rateLimit(10, 60_000), (req, res) => {
   if (!m || typeof secret !== 'string' || !checkSecret(m, secret)) {
     return void res.status(401).json({ error: 'NBP/No. WA/alias atau PIN/password salah' });
   }
+  if (loginBlocked(res, m.id)) return;
   // Belum punya template wajah (di-reset admin / ganti model) → wajib daftar
   // ulang wajah dulu (tanpa template tidak bisa absen).
   if (!loadTemplate(m.id)) return void res.json({ ok: true, memberId: m.id, nama: m.nama, needEnroll: true, preToken: issuePrelogin(m.id) });
@@ -804,6 +882,7 @@ app.post('/api/login/enroll-face', rateLimit(20, 60_000), async (req, res) => {
   const { preToken } = (req.body ?? {}) as { preToken: string };
   const memberId = checkPrelogin(preToken);
   if (!memberId) return void res.status(401).json({ error: 'Sesi login kedaluwarsa — ulangi dari awal.' });
+  if (loginBlocked(res, memberId)) return;
   if (loadTemplate(memberId)) return void res.status(409).json({ error: 'Wajah akun ini sudah terdaftar — silakan login.' });
   let face;
   try {
@@ -849,6 +928,7 @@ app.post('/api/login/identify', rateLimit(20, 60_000), async (req, res) => {
     return void res.status(409).json({ error: 'Wajahmu mirip dengan anggota lain — pakai login manual.' });
   }
   logCheck({ purpose: 'identify', memberId: top.memberId, ok: true, scores, similarity: top.sim });
+  if (loginBlocked(res, top.memberId)) return;
   const m = db.select().from(members).where(eq(members.id, top.memberId)).all()[0];
   const tanggal = todayLocal();
   res.json({ ok: true, memberId: top.memberId, nama: m?.nama ?? top.memberId, attest: issueAttest(top.memberId, tanggal), tanggal });
@@ -884,13 +964,14 @@ app.put('/api/members/:id/kontak', (req, res) => {
 // ---- hapus anggota (Admin): bersih + file ikut dibuang ----
 // Hapus anggota (+semua data & file) = SUPERADMIN saja.
 app.delete('/api/members/:id', (req, res) => {
-  if (req.header('x-super-pin') !== SUPER_PIN) {
+  if (!headerPinOk(req, 'super')) {
     return void res.status(403).json({ error: 'khusus superadmin' });
   }
   const id = req.params.id;
   db.transaction((tx) => {
     tx.delete(pushSubs).where(eq(pushSubs.memberId, id)).run();
     tx.delete(attestIssued).where(eq(attestIssued.memberId, id)).run();
+    tx.delete(pinGuard).where(eq(pinGuard.key, `m:${id}`)).run();
     tx.delete(lapsit).where(eq(lapsit.memberId, id)).run();
     tx.delete(attendance).where(eq(attendance.memberId, id)).run();
     tx.delete(evidence).where(eq(evidence.memberId, id)).run();
@@ -1101,7 +1182,7 @@ app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
 // boleh lihat foto SIAPA PUN — dipakai di tab Mingguan admin & Superadmin.
 app.get('/api/evidence', (req, res) => {
   const { date, from, to, memberId } = req.query as Record<string, string | undefined>;
-  const isAdmin = pinEq(req.header('x-admin-pin'), ADMIN_PIN);
+  const isAdmin = headerPinOk(req, 'admin');
   let rows = db.select().from(evidence).all();
   if (date) rows = rows.filter((r) => r.tanggal === date);
   if (from && to) rows = rows.filter((r) => r.tanggal >= from && r.tanggal <= to);
@@ -1169,7 +1250,7 @@ app.post('/api/evidence', (req, res) => {
 // boleh lihat semua — sama seperti evidence.
 app.get('/api/lapsit', (req, res) => {
   const { date, from, to, memberId } = req.query as Record<string, string | undefined>;
-  const isAdmin = pinEq(req.header('x-admin-pin'), ADMIN_PIN);
+  const isAdmin = headerPinOk(req, 'admin');
   let rows = db.select().from(lapsit).all();
   if (date) rows = rows.filter((r) => r.tanggal === date);
   if (from && to) rows = rows.filter((r) => r.tanggal >= from && r.tanggal <= to);
@@ -1334,7 +1415,7 @@ app.get('/api/nilai/today', (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') || !memberId) {
     return void res.status(400).json({ error: 'date & memberId wajib' });
   }
-  const isSuper = pinEq(req.header('x-super-pin') ?? '', SUPER_PIN);
+  const isSuper = headerPinOk(req, 'super');
   if (!isSuper && !checkAttest(attest, memberId, date as string)) {
     return void res.status(403).json({ error: 'Login dulu hari ini.' });
   }

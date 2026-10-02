@@ -114,6 +114,8 @@ Perintah lain: `pnpm build` (tsc + vite build), `pnpm lint` (oxlint). Service wo
 
 Autentikasi aksi sensitif: identitas member dari sesi login + token wajah harian (`attest`); admin pakai header `x-admin-pin`, superadmin `x-super-pin`. Endpoint sensitif diberi rate-limit per IP.
 
+Salah PIN admin/superadmin **5×** → diblokir **1 jam** (tabel `pin_guard`). Member yang sedang login dihitung per akun: sesinya dicabut (auto logout) dan login ditolak sampai blokir habis; tanpa login dihitung per IP. Superadmin bisa membuka blokir di tab **Anggota** → "Diblokir karena salah PIN" → **Unblok**.
+
 | Area | Endpoint |
 |---|---|
 | Umum | `GET /api/health`, `GET /api/state`, `GET/PUT /api/settings`, `PUT /api/settings/mako` (super) |

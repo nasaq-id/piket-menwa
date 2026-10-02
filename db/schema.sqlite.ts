@@ -184,3 +184,15 @@ export const faceChecks = sqliteTable('face_checks', {
   turnTurn: real('turn_turn'),
   similarity: real('similarity'), // ke template terdaftar (login/absen) atau duplikat tertinggi (daftar)
 });
+
+// Penjaga salah PIN admin/superadmin. key = 'm:<memberId>' (member yang sedang
+// login, dihitung per akun) atau 'ip:<ip>' (belum login). 5× salah → blokir 1 jam.
+export const pinGuard = sqliteTable('pin_guard', {
+  key: text('key').primaryKey(),
+  memberId: text('member_id'),
+  ip: text('ip'),
+  fails: integer('fails').notNull().default(0),
+  blockedUntil: integer('blocked_until'), // NULL = tidak diblokir
+  lastAt: integer('last_at').notNull(),
+  lastKind: text('last_kind'), // admin | super
+});

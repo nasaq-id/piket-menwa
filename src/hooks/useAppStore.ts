@@ -13,7 +13,7 @@ import {
 import { getGeo, compressPhoto, stampPhoto, type Geo } from '../bukti';
 import { ting } from '../face';
 import { angkatanFromNbp, profileSchema, type Profile } from '../Welcome';
-import { DAYS, dateStr, load, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
+import { DAYS, dateStr, load, pinSalahMsg, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
 
 export type Tab = 'hari' | 'minggu' | 'tukar';
 
@@ -562,6 +562,7 @@ export function useAppStore() {
   const logout = () => {
     void dropPush();
     clearAttest();
+    setAdmin(false);
     setMe('');
     setShowLogout(false);
   };
@@ -838,10 +839,17 @@ export function useAppStore() {
         // server tidak terjangkau → tolak, jangan lolos tanpa PIN
         setToast({ msg: 'Mode admin butuh koneksi ke server.', kind: 'error' });
         return;
-      } else if (res) {
+      } else if (res.blocked) {
+        // Salah 5× → server sudah mencabut sesi; keluar dari akun.
+        setShowPin(false);
+        setPinInput('');
+        logout();
+        setToast({ msg: res.error ?? 'Akun diblokir 1 jam. Hubungi developer.', kind: 'error' });
+        return;
+      } else if (res.ok) {
         setAdmin(true);
       } else {
-        setToast({ msg: 'PIN salah.', kind: 'error' });
+        setToast({ msg: pinSalahMsg(res.sisa), kind: 'error' });
         return;
       }
       setShowPin(false);

@@ -44,7 +44,7 @@ export default function App() {
   if (hash === '#super') {
     return (
       <div className="phone wide tac">
-        <SuperView onExit={() => { location.hash = ''; }} />
+        <SuperView onExit={() => { location.hash = ''; }} onBlocked={store.logout} />
       </div>
     );
   }

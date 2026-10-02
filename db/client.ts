@@ -97,6 +97,11 @@ CREATE TABLE IF NOT EXISTS face_checks (
   live_front REAL, live_turn REAL, turn_front REAL, turn_turn REAL, similarity REAL
 );
 CREATE INDEX IF NOT EXISTS idx_face_checks_at ON face_checks(at);
+CREATE TABLE IF NOT EXISTS pin_guard (
+  key TEXT PRIMARY KEY, member_id TEXT, ip TEXT,
+  fails INTEGER NOT NULL DEFAULT 0, blocked_until INTEGER,
+  last_at INTEGER NOT NULL, last_kind TEXT
+);
 `);
 
 // Hapus jalur verifikasi-manual (assessments dkk): satu-satunya sistem nilai

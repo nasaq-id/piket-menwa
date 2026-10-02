@@ -100,19 +100,55 @@ export async function dropPush() {
 // ---- superadmin (dev) ----
 export const getSuperPin = () => sessionStorage.getItem('super-pin');
 
-export async function verifySuper(pin: string): Promise<boolean | null> {
+// Hasil cek PIN admin/superadmin. blocked = salah 5× → diblokir 1 jam
+// (member yang login otomatis di-logout). null = server tak terjangkau.
+export type PinCheck = { ok: boolean; blocked?: boolean; sisa?: number; error?: string } | null;
+
+// Member yang sedang login di HP ini (sesi berlaku hari ini saja) — dikirim
+// saat cek PIN supaya salah PIN dihitung per akun, bukan per IP.
+const currentMe = (): string => {
   try {
-    const r = await fetch('/api/super/verify', {
+    return localStorage.getItem('piket-me-date') === dateStr(0) ? load('piket-me', '') : '';
+  } catch {
+    return '';
+  }
+};
+
+async function checkPin(path: string, pin: string): Promise<PinCheck> {
+  try {
+    const memberId = currentMe();
+    const r = await fetch(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
+      body: JSON.stringify({ pin, memberId: memberId || undefined, attest: memberId ? getAttest(memberId, dateStr(0)) : undefined }),
     });
-    if (!r.ok) return null;
-    const { ok } = (await r.json()) as { ok: boolean };
-    if (ok) sessionStorage.setItem('super-pin', pin);
-    return ok;
+    if (!r.ok && r.status !== 423) return null;
+    return (await r.json()) as PinCheck;
   } catch {
     return null;
+  }
+}
+
+export async function verifySuper(pin: string): Promise<PinCheck> {
+  const r = await checkPin('/api/super/verify', pin);
+  if (r?.ok) sessionStorage.setItem('super-pin', pin);
+  return r;
+}
+
+// Superadmin: akun/IP yang sedang diblokir karena salah PIN.
+export interface PinBlock {
+  key: string; memberId: string | null; nama: string | null; ip: string | null;
+  fails: number; blockedUntil: number; lastKind: 'admin' | 'super' | null;
+}
+export async function unblockPin(key: string): Promise<boolean> {
+  try {
+    const r = await fetch(`/api/super/pin-blocks/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: { ...(getSuperPin() ? { 'x-super-pin': getSuperPin() as string } : {}) },
+    });
+    return r.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -163,20 +199,10 @@ export const getPin = () => sessionStorage.getItem('piket-pin');
 export const setPin = (pin: string) => sessionStorage.setItem('piket-pin', pin);
 export const clearPin = () => sessionStorage.removeItem('piket-pin');
 
-export async function verifyPin(pin: string): Promise<boolean | null> {
-  try {
-    const r = await fetch('/api/admin/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pin }),
-    });
-    if (!r.ok) return null;
-    const { ok } = (await r.json()) as { ok: boolean };
-    if (ok) setPin(pin);
-    return ok;
-  } catch {
-    return null; // offline
-  }
+export async function verifyPin(pin: string): Promise<PinCheck> {
+  const r = await checkPin('/api/admin/verify', pin);
+  if (r?.ok) setPin(pin);
+  return r;
 }
 
 export interface AppState {

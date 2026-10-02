@@ -84,3 +84,7 @@ export const geserJam = (hhmm: string, menit: number) => {
   const t = (h * 60 + m + menit + 1440) % 1440;
   return `${String(Math.floor(t / 60)).padStart(2, '0')}.${String(t % 60).padStart(2, '0')}`;
 };
+
+// Pesan salah PIN admin/superadmin + sisa percobaan sebelum diblokir 1 jam.
+export const pinSalahMsg = (sisa?: number) =>
+  sisa === undefined ? 'PIN salah.' : `PIN salah. Sisa ${sisa}× lagi sebelum akun diblokir 1 jam.`;

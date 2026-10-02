@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   deleteMember, isOnline, loadAttendance, loadEvidence, loadFaceSummary,
-  loadLapsit, loadState, superGet, verifySuper,
+  loadLapsit, loadState, superGet, unblockPin, verifySuper,
   type AppState, type AttRow, type EvidenceRow, type FaceSummary, type FeedItem,
-  type LapsitRow, type Overview, type SwapRow,
+  type LapsitRow, type Overview, type PinBlock, type SwapRow,
 } from './api';
-import { dateStr } from './piket';
+import { dateStr, pinSalahMsg } from './piket';
 import { BREAKDOWN } from './breakdown';
 import { MakoPanel } from './components/MakoPanel';
 import { Button } from './components/Button';
@@ -45,7 +45,8 @@ const loadTab = (): SuperTab => {
   return 'ringkasan';
 };
 
-export default function SuperView({ onExit }: { onExit: () => void }) {
+// onBlocked: salah PIN 5× saat ada member login di HP ini → keluarkan member itu.
+export default function SuperView({ onExit, onBlocked }: { onExit: () => void; onBlocked?: () => void }) {
   const [ok, setOk] = useState(sessionStorage.getItem('super-pin') ? true : false);
   const [pin, setPin] = useState('');
   const [tab, setTab] = useState<SuperTab>(loadTab);
@@ -68,6 +69,7 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
   const [openTgl, setOpenTgl] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
+  const [blocks, setBlocks] = useState<PinBlock[]>([]);
   const { req: confirmReq, ask, resolve: resolveConfirm } = useConfirm();
 
   useEffect(() => {
@@ -99,12 +101,33 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
     void reloadMembers();
   };
 
+  const loadBlocks = async () => setBlocks((await superGet<PinBlock[]>('/api/super/pin-blocks')) ?? []);
+  useEffect(() => {
+    if (!ok || tab !== 'anggota') return;
+    (async () => {
+      setBlocks((await superGet<PinBlock[]>('/api/super/pin-blocks')) ?? []);
+    })();
+  }, [ok, tab]);
+  const bukaBlokir = async (b: PinBlock) => {
+    const siapa = b.nama ?? `IP ${b.ip ?? '?'}`;
+    const yes = await ask({ title: 'Buka blokir?', message: `${siapa} bisa login & coba PIN lagi sekarang.`, confirmLabel: 'Buka blokir' });
+    if (!yes) return;
+    if (!(await unblockPin(b.key))) return setToast({ msg: 'Gagal buka blokir (PIN superadmin / online).', kind: 'error' });
+    setToast({ msg: `Blokir ${siapa} dibuka.`, kind: 'ok' });
+    void loadBlocks();
+  };
+  const jam = (t: number) => new Date(t).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
   const submitPin = async () => {
     setPinBusy(true);
     try {
       const r = await verifySuper(pin);
-      if (r) setOk(true);
-      else setToast({ msg: r === null ? 'Server tidak terjangkau.' : 'PIN salah.', kind: 'error' });
+      if (r?.ok) setOk(true);
+      else if (r?.blocked) {
+        setPin('');
+        onBlocked?.();
+        setToast({ msg: r.error ?? 'Diblokir 1 jam. Hubungi developer.', kind: 'error' });
+      } else setToast({ msg: r === null ? 'Server tidak terjangkau.' : pinSalahMsg(r.sisa), kind: 'error' });
     } finally {
       setPinBusy(false);
     }
@@ -314,6 +337,30 @@ export default function SuperView({ onExit }: { onExit: () => void }) {
 
           {tab === 'anggota' && (
             <>
+              <h2>Diblokir karena salah PIN ({blocks.length})</h2>
+              {blocks.length === 0
+                ? <Empty text="Tidak ada akun yang diblokir." />
+                : (
+                  <div className="supscroll">
+                    <table className="suptable">
+                      <thead><tr><th>Akun / IP</th><th>PIN</th><th>Sampai</th><th></th></tr></thead>
+                      <tbody>
+                        {blocks.map((b) => (
+                          <tr key={b.key}>
+                            <td>{b.nama ?? `IP ${b.ip ?? '?'}`}</td>
+                            <td>{b.lastKind === 'super' ? 'Superadmin' : 'Admin'}</td>
+                            <td>{jam(b.blockedUntil)}</td>
+                            <td>
+                              <Button variant="secondary" className="supdelbtn" ariaLabel={`Buka blokir ${b.nama ?? b.ip ?? ''}`} onClick={() => void bukaBlokir(b)}>
+                                Unblok
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               <h2>Pengguna ({members.length})</h2>
               <div className="supscroll">
                 <table className="suptable">
