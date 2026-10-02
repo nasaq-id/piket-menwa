@@ -13,7 +13,7 @@ export const members = sqliteTable('members', {
   lastSeen: integer('last_seen'), // heartbeat presence (epoch ms)
   pinHash: text('pin_hash'), // scrypt hash rahasia login (PIN atau password, lihat authType)
   authType: text('auth_type').notNull().default('pin'), // 'pin' | 'password' — dipilih anggota saat daftar
-  nbp: text('nbp'), // Nomor Buku Pokok Menwa, format 1494.08.148031 (unik, opsional)
+  nbp: text('nbp'), // Nomor Buku Pokok Menwa, format 1494.08.48031 (unik, opsional)
   wa: text('wa'), // No. WhatsApp ternormalisasi 628xxx (unik) — identitas login cadangan bila NBP kosong
   alias: text('alias'), // nama panggilan, unik tanpa beda huruf besar/kecil — identitas login ketiga
 });

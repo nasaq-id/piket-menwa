@@ -21,7 +21,7 @@ export const JABATAN_LIST = [
 
 const JABATAN_ICON = [Shield, ClipboardList, FileText, Users, Briefcase, Flag, Award, Medal, Sprout] as const;
 
-// NBP Menwa: 1494.08.148031 — ketik 12 digit, titik disisipkan otomatis.
+// NBP Menwa: 1494.08.48031 — ketik angkanya saja, titik disisipkan otomatis.
 export const formatNbp = (v: string) => {
   const d = v.replace(/\D/g, '').slice(0, 12);
   return [d.slice(0, 4), d.slice(4, 6), d.slice(6)].filter(Boolean).join('.');
@@ -34,15 +34,15 @@ export const normWa = (v: string): string | null => {
   return /^628\d{7,12}$/.test(d) ? d : null;
 };
 
-// Angkatan dari 2 digit pertama NBP: 1494.08.148031 → "14" → 2014 (sama dgn server).
+// Angkatan dari 2 digit pertama NBP: 1494.08.48031 → "14" → 2014 (sama dgn server).
 export const angkatanFromNbp = (nbp: string): string | null => {
-  if (!/^\d{4}\.\d{2}\.\d{6}$/.test(nbp)) return null;
+  if (!/^\d{4}\.\d{2}\.\d{1,6}$/.test(nbp)) return null;
   const y = 2000 + Number(nbp.slice(0, 2));
   return String(y > new Date().getFullYear() + 1 ? y - 100 : y);
 };
 
 const waSchema = z.string().trim().refine((v) => normWa(v) !== null, 'No. WhatsApp tidak valid (cth: 081234567890)');
-const nbpSchema = z.string().trim().refine((v) => v === '' || angkatanFromNbp(v) !== null, 'Format NBP harus seperti 1494.08.148031');
+const nbpSchema = z.string().trim().refine((v) => v === '' || angkatanFromNbp(v) !== null, 'Format NBP harus seperti 1494.08.48031');
 const aliasSchema = z.string().trim()
   .regex(/^[A-Za-z0-9._-]{3,20}$/, 'Alias 3–20 huruf/angka tanpa spasi')
   .regex(/[A-Za-z]/, 'Alias wajib ada hurufnya');
@@ -339,7 +339,7 @@ export function NbpField({ value, onChange, onEnter }: { value: string; onChange
       <span>NBP (Nomor Buku Pokok) Menwa</span>
       <input
         inputMode="numeric" maxLength={14}
-        placeholder="cth: 1494.08.148031" value={value}
+        placeholder="cth: 1494.08.48031" value={value}
         onChange={(e) => onChange(formatNbp(e.target.value))}
         onKeyDown={(e) => { if (e.key === 'Enter') onEnter?.(); }}
       />

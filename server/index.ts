@@ -519,13 +519,14 @@ const checkSecret = (m: typeof members.$inferSelect, secret: string): boolean =>
   return false;
 };
 
-// ---- identitas login: NBP Menwa (1494.08.148031) atau No. WhatsApp ----
-const NBP_RE = /^\d{4}\.\d{2}\.\d{6}$/;
-// Terima dengan titik (1494.08.148031) atau 12 digit polos (149408148031).
+// ---- identitas login: NBP Menwa (1494.08.48031) atau No. WhatsApp ----
+// Segmen akhir tanpa batas minimal (maks 6 digit).
+const NBP_RE = /^\d{4}\.\d{2}\.\d{1,6}$/;
+// Terima dengan titik (1494.08.48031) atau 7–12 digit polos (14940848031).
 const normNbp = (v: unknown): string | null => {
   const t = typeof v === 'string' ? v.trim() : '';
   if (NBP_RE.test(t)) return t;
-  return /^\d{12}$/.test(t) ? `${t.slice(0, 4)}.${t.slice(4, 6)}.${t.slice(6)}` : null;
+  return /^\d{7,12}$/.test(t) ? `${t.slice(0, 4)}.${t.slice(4, 6)}.${t.slice(6)}` : null;
 };
 // 08xx / +628xx / 628xx / 8xx → 628xx (10–15 digit total).
 const normWa = (v: unknown): string | null => {
@@ -541,7 +542,7 @@ const normAlias = (v: unknown): string | null => {
   const t = typeof v === 'string' ? v.trim() : '';
   return ALIAS_RE.test(t) ? t : null;
 };
-// Angkatan dari 2 digit pertama NBP: 1494.08.148031 → "14" → 2014.
+// Angkatan dari 2 digit pertama NBP: 1494.08.48031 → "14" → 2014.
 // Tahun di depan tahun ini dianggap abad lalu (mis. "98" → 1998).
 const angkatanFromNbp = (nbp: string): string => {
   const yy = Number(nbp.slice(0, 2));
@@ -584,7 +585,7 @@ const parseIdentity = (
   if (kontakTaken('alias', alias, exceptId)) return { status: 409, error: 'Alias sudah dipakai' };
   const nbpRaw = typeof body.nbp === 'string' ? body.nbp.trim() : '';
   const nbp = nbpRaw ? normNbp(nbpRaw) : null;
-  if (nbpRaw && !nbp) return { status: 400, error: 'Format NBP harus seperti 1494.08.148031' };
+  if (nbpRaw && !nbp) return { status: 400, error: 'Format NBP harus seperti 1494.08.48031' };
   if (nbp && kontakTaken('nbp', nbp, exceptId)) return { status: 409, error: 'NBP sudah terdaftar' };
   return { wa, alias, nbp, angkatan: nbp ? angkatanFromNbp(nbp) : null };
 };
