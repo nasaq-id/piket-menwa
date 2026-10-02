@@ -135,11 +135,19 @@ export function SecretField({ label, authType, onAuthType, value, onChange, onEn
   );
 }
 
-// Dua jalur login lewat logo (pilihan tidak ditampilkan langsung):
-//   ketuk 1× → form manual (NBP / No. WA / alias + PIN/password)
-//   ketuk 2× → kamera langsung scan wajah (server mengenali pemiliknya).
+// Dua jalur login, dua-duanya selalu terlihat:
+//   tombol utama "Masuk dengan Wajah" → kamera scan wajah (server mengenali pemiliknya)
+//   tombol sekunder → form manual (NBP / No. WA / alias + PIN/password)
+// Jalur terakhir yang dipakai diingat: kalau manual, form langsung terbuka.
+const LOGIN_PREF = 'piket-login-mode';
+const loadManualPref = (): boolean => {
+  try { return localStorage.getItem(LOGIN_PREF) === 'manual'; } catch { return false; }
+};
+const saveLoginPref = (m: 'face' | 'manual') => {
+  try { localStorage.setItem(LOGIN_PREF, m); } catch { /* abaikan */ }
+};
 // Contoh dummy untuk placeholder login (BUKAN data nyata), tampil bergantian.
-const LOGIN_CONTOH = ['1494.08.100001', '081234567890', 'rajawali'];
+const LOGIN_CONTOH = ['1494.08.10001', '081234567890', 'rajawali'];
 const LOGIN_STATIS = 'NBP, No. WA, atau alias';
 export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   onLogin: (ident: string, secret: string) => Promise<{ ok: boolean; error?: string }>;
@@ -153,7 +161,7 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   const [authType, setAuthType] = useState<AuthType>(loadAuthPref);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(loadManualPref);
   // Tanpa animasi gerak: placeholder login statis.
   const [kurangiGerak, setKurangiGerak] = useState(
     () => typeof window !== 'undefined'
@@ -170,26 +178,9 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   // Placeholder mengetik satu contoh bergantian (tanpa awalan "contoh:"),
   // berhenti saat field sudah berisi — sama gaya dengan field nama wizard.
   const loginAnim = useTypingPlaceholder(LOGIN_CONTOH, showForm && ident === '' && !kurangiGerak);
-  // Riak sentuh logo: umpan balik langsung saat pointerdown (framer-motion).
-  // Logika bedakan 1×/2× tetap lewat onLogoTap + jeda TAP_WINDOW.
-  const [ping, setPing] = useState(0);
-  // Bedakan ketuk 1× vs 2×: tunggu sebentar setelah ketukan pertama.
-  const TAP_WINDOW = 300;
-  const tapTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(tapTimer.current), []);
-  const onLogoTap = () => {
-    if (tapTimer.current !== undefined) {
-      window.clearTimeout(tapTimer.current);
-      tapTimer.current = undefined;
-      try { navigator.vibrate?.([15, 40, 15]); } catch { /* opsional */ }
-      onFaceLogin();
-      return;
-    }
-    tapTimer.current = window.setTimeout(() => {
-      tapTimer.current = undefined;
-      try { navigator.vibrate?.(15); } catch { /* opsional */ }
-      setShowForm((v) => !v);
-    }, TAP_WINDOW);
+  const faceLogin = () => {
+    saveLoginPref('face');
+    onFaceLogin();
   };
   const pickAuth = (t: AuthType) => {
     setAuthType(t);
@@ -202,7 +193,10 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
     setErr(null);
     const r = await onLogin(ident.trim(), secret);
     setBusy(false);
-    if (r.ok) setSecret('');
+    if (r.ok) {
+      setSecret('');
+      saveLoginPref('manual');
+    }
     else setErr(r.error ?? 'Gagal masuk.');
   };
   const fade = (delay: number) => ({
@@ -217,39 +211,38 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.35 }}
     >
-      <span className="wlogowrap">
-      <motion.button
-        type="button"
-        className="wlogo wlogotap"
-        aria-label="Ketuk 1 kali untuk login manual, 2 kali untuk login dengan wajah"
-        onClick={onLogoTap}
-        onPointerDown={() => setPing((p) => p + 1)}
+      <motion.div
+        className={`wlogo${showForm ? ' wlogo--sm' : ''}`}
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        whileTap={{ scale: 0.92 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
       >
         {logoOk
           ? <img src="/brand/logo-menwa.png" alt="Logo Menwa" onError={() => setLogoOk(false)} />
           : <Shield size={52} />}
-      </motion.button>
-      {ping > 0 && (
-        <motion.span
-          key={ping}
-          className="wlogoring"
-          aria-hidden="true"
-          initial={{ opacity: 0.7, scale: 0.85 }}
-          animate={{ opacity: 0, scale: 1.12 }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
-        />
-      )}
-      </span>
-      <motion.p className="whint tapHint" {...fade(0.2)}>Ketuk logo 1× login manual • 2× login dengan wajah</motion.p>
+      </motion.div>
       <motion.h1 className="wtitle" {...fade(0.08)}>JURNAL PIKET MENWA USB YPKP TAHUN 2026</motion.h1>
       <motion.p className="wsub" {...fade(0.16)}>Absensi, Jadwal Piket, Bukti Tugas.</motion.p>
-      <AnimatePresence initial={false}>
-        {showForm && (
+      <AnimatePresence mode="wait" initial={false}>
+        {!showForm ? (
+        <motion.div
+          key="pick"
+          className="loginpick"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+        >
+          <Button variant="primary" onClick={faceLogin}>
+            <ScanFace size={18} /> Masuk dengan Wajah
+          </Button>
+          <Button variant="secondary" onClick={() => setShowForm(true)}>
+            <KeyRound size={18} /> Pakai NBP / WA + PIN
+          </Button>
+        </motion.div>
+        ) : (
         <motion.form
+          key="form"
           className="loginform"
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
@@ -274,20 +267,26 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
           <Button variant="primary" type="submit" busy={busy}>
             <KeyRound size={18} /> Masuk
           </Button>
+          <button type="button" className="wlink loginswitch" onClick={() => { setShowForm(false); setErr(null); }}>
+            <ScanFace size={14} /> Masuk dengan wajah saja
+          </button>
         </motion.form>
         )}
       </AnimatePresence>
-      <motion.p className="whint" {...fade(0.32)}>
-        Belum punya akun? <button className="wlink" onClick={onRegister}>Daftar</button>
-      </motion.p>
-      <motion.p
-        className="wsecure"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.35, delay: 0.4 }}
-      >
-        Foto wajah dipakai untuk login & absen. Foto tidak disimpan.
-      </motion.p>
+      {/* Footer: menempel di bawah layar, konten utama tetap di tengah. */}
+      <footer className="wfoot">
+        <motion.p className="whint" {...fade(0.32)}>
+          Belum punya akun? <button className="wlink" onClick={onRegister}>Daftar</button>
+        </motion.p>
+        <motion.p
+          className="wsecure"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.35, delay: 0.4 }}
+        >
+          Foto wajah dipakai untuk login & absen. Foto tidak disimpan.
+        </motion.p>
+      </footer>
     </motion.div>
   );
 }

@@ -463,8 +463,6 @@ button:active { transform:scale(.97); }
 .camcard .hint.turnmsg { color:#4ade80; font-size:16px; font-weight:700; text-align:center; }
 
 /* Logo = tombol login (ketuk 1× manual, 2× wajah) */
-.wlogotap { position:relative; background:none; border:none; padding:0; cursor:pointer; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
-.tapHint { margin-top:-4px; font-size:12px; color:var(--dim); }
 .wfield .hint.ok { color:#4ade80; }
 .attrow .badge-no.late { color:var(--danger); background:rgba(248,113,113,.12); }
 .makopanel { display:flex; flex-direction:column; gap:8px; text-align:left; }
@@ -511,9 +509,6 @@ button:active { transform:scale(.97); }
 .tac .picklist button { border-radius:var(--radius); }
 
 /* ---- Fase 5: login & daftar ---- */
-.wlogowrap { position:relative; display:inline-grid; place-items:center; }
-.wlogoring { position:absolute; inset:-8px; border:2px solid var(--accent); border-radius:36px; pointer-events:none; }
-.tac .wlogoring { border-radius:10px; }
 .loginform .btn { margin-top:6px; width:100%; }
 .welcome .row .btn { margin-top:0; flex:1; }
 .dupebox .btn { margin-top:6px; width:100%; }
@@ -569,3 +564,17 @@ button:active { transform:scale(.97); }
 .lbgroup b { display:block; margin:8px 0 2px; font-size:13px; }
 /* bukti: centang kecil menggantikan checkbox (foto sudah jadi tandanya) */
 .tasks li .donecheck { color:var(--accent); flex:none; }
+
+/* Login: dua jalur selalu terlihat (wajah = utama, manual = sekunder) */
+.loginpick { display:flex; flex-direction:column; gap:10px; width:100%; margin-top:14px; overflow:hidden; padding:2px 0; }
+.loginpick .btn { width:100%; }
+.loginswitch { display:inline-flex; align-items:center; justify-content:center; gap:6px; align-self:center; margin-top:4px; min-height:44px; }
+.wlogo { transition:width .25s ease, height .25s ease; }
+.wlogo--sm { width:64px; height:64px; }
+.wlogo--sm img { width:48px; height:48px; }
+/* Footer login di bawah layar; margin auto atas (logo) + bawah (footer) = konten tetap di tengah. */
+.welcome--login > .wlogo { margin-top:auto; }
+.wfoot { margin-top:auto; padding-top:20px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.wfoot .whint, .wfoot .wsecure { margin:0; }
+/* Halaman login tidak punya tab bawah → buang ruang 84px-nya, cukup safe-area. */
+.phone:has(> .welcome--login) { padding-bottom:env(safe-area-inset-bottom); }
