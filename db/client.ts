@@ -94,7 +94,9 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS face_checks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, purpose TEXT NOT NULL,
   member_id TEXT, ok INTEGER NOT NULL, reason TEXT,
-  live_front REAL, live_turn REAL, turn_front REAL, turn_turn REAL, similarity REAL
+  live_front REAL, live_turn REAL, turn_front REAL, turn_turn REAL, similarity REAL,
+  frame_w INTEGER, frame_h INTEGER, face_w INTEGER, face_h INTEGER,
+  live_v2 REAL, live_v1se REAL, luma REAL, ua TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_face_checks_at ON face_checks(at);
 CREATE TABLE IF NOT EXISTS pin_guard (
@@ -208,6 +210,20 @@ try {
   if (!rcols.some((c) => c.name === 'week_start')) {
     sqlite.exec('ALTER TABLE roster ADD COLUMN week_start TEXT');
     console.log('migrasi roster +week_start ok');
+  }
+  // Diagnosa per scan wajah (tanpa gambar): ukuran frame/box, skor tiap model
+  // liveness, kecerahan area wajah, & User-Agent — untuk investigasi kegagalan.
+  const fccols = sqlite.prepare('PRAGMA table_info(face_checks)').all() as { name: string }[];
+  for (const [col, ddl] of [
+    ['frame_w', 'frame_w INTEGER'], ['frame_h', 'frame_h INTEGER'],
+    ['face_w', 'face_w INTEGER'], ['face_h', 'face_h INTEGER'],
+    ['live_v2', 'live_v2 REAL'], ['live_v1se', 'live_v1se REAL'],
+    ['luma', 'luma REAL'], ['ua', 'ua TEXT'],
+  ] as const) {
+    if (!fccols.some((c) => c.name === col)) {
+      sqlite.exec(`ALTER TABLE face_checks ADD COLUMN ${ddl}`);
+      console.log(`migrasi face_checks +${col} ok`);
+    }
   }
   // 1 override per (minggu, hari, anggota) — cegah duplikat drag-drop yang gagal di-clean.
   sqlite.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_roster_week_uniq ON roster(week_start, day, member_id) WHERE week_start IS NOT NULL');

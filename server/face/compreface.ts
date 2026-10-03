@@ -5,6 +5,34 @@
 const URL_BASE = process.env.COMPREFACE_URL ?? 'http://127.0.0.1:8000';
 const API_KEY = process.env.COMPREFACE_DETECT_KEY ?? '';
 
+// Banyak frame dikirim berurutan saat scan → batasi request CompreFace yang
+// berjalan bersamaan, sisanya antre FIFO (tanpa library).
+const MAX_INFLIGHT = (() => {
+  const v = Number(process.env.COMPREFACE_MAX_INFLIGHT);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 2;
+})();
+const MAX_QUEUE = 30;
+
+let inflight = 0;
+const waiters: (() => void)[] = [];
+
+// Ambil slot; null = antrean penuh (jangan tambah beban ke CompreFace).
+const acquireSlot = (): Promise<void> | null => {
+  if (inflight < MAX_INFLIGHT) {
+    inflight++;
+    return Promise.resolve();
+  }
+  if (waiters.length >= MAX_QUEUE) return null;
+  return new Promise<void>((resolve) => waiters.push(resolve));
+};
+
+const releaseSlot = () => {
+  const next = waiters.shift();
+  // Slot diteruskan ke antrean berikutnya (inflight tetap); kosong → kurangi.
+  if (next) next();
+  else inflight--;
+};
+
 export interface DetectedFace {
   box: { x_min: number; y_min: number; x_max: number; y_max: number; probability: number };
   embedding: number[];
@@ -20,6 +48,17 @@ export interface DetectResult {
 export class CompreFaceError extends Error {}
 
 export async function detectFaces(jpeg: Buffer): Promise<DetectResult> {
+  const slot = acquireSlot();
+  if (!slot) throw new CompreFaceError('antrean penuh');
+  try {
+    await slot; // tunggu giliran dulu
+    return await detectFacesOnce(jpeg); // timeout 15 s dihitung SETELAH dapat giliran
+  } finally {
+    releaseSlot();
+  }
+}
+
+async function detectFacesOnce(jpeg: Buffer): Promise<DetectResult> {
   if (!API_KEY) throw new CompreFaceError('COMPREFACE_DETECT_KEY belum diset');
   // status=true → respons menyertakan plugins_versions (versi model embedding).
   const q = new URLSearchParams({ face_plugins: 'calculator,landmarks', det_prob_threshold: '0.8', limit: '0', status: 'true' });

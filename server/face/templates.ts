@@ -42,10 +42,11 @@ export function saveTemplate(memberId: string, frames: FrameResult[]) {
 /** Catat skor verifikasi (tanpa gambar/embedding) untuk kalibrasi & investigasi. */
 export function logCheck(p: {
   purpose: Purpose; memberId: string | null; ok: boolean; reason?: string | null;
-  scores: ChallengeScores; similarity?: number | null;
+  scores: ChallengeScores; similarity?: number | null; ua?: string | null;
 }) {
   db.insert(faceChecks).values({
     at: Date.now(), purpose: p.purpose, memberId: p.memberId, ok: p.ok ? 1 : 0, reason: p.reason ?? null,
     ...p.scores, similarity: p.similarity ?? null,
+    ua: p.ua ? p.ua.slice(0, 160) : null,
   }).run();
 }

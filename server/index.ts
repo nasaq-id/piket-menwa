@@ -708,7 +708,7 @@ const faceError = (res: import('express').Response, e: unknown) => {
 // Jalankan challenge + catat skornya. `match` (opsional) menghitung
 // similarity ke template dan boleh menolak dengan pesan sendiri.
 const verifyFace = async (
-  body: { challengeId?: unknown; frames?: unknown }, purpose: Purpose, memberId: string | null,
+  body: { challengeId?: unknown; frames?: unknown }, purpose: Purpose, memberId: string | null, ua?: string,
 ): Promise<{ ok: true; out: Extract<ChallengeOutcome, { ok: true }> } | { ok: false; status: number; error: string }> => {
   // frames = [] → frame sudah dikirim satu per satu lewat /api/face/frame.
   const streamed = Array.isArray(body.frames) && body.frames.length === 0;
@@ -716,7 +716,7 @@ const verifyFace = async (
   if (!streamed && !frames) return { ok: false, status: 400, error: 'Data kamera tidak lengkap — coba lagi.' };
   const out = await runChallenge(body.challengeId, purpose, memberId, frames);
   if (!out.ok) {
-    logCheck({ purpose, memberId, ok: false, reason: out.reason, scores: out.scores });
+    logCheck({ purpose, memberId, ok: false, reason: out.reason, scores: out.scores, ua });
     return { ok: false, status: 422, error: out.msg };
   }
   return { ok: true, out };
@@ -807,7 +807,7 @@ app.post('/api/register', rateLimit(10, 60_000), async (req, res) => {
   // Wajah WAJIB: dipakai verifikasi login + absensi piket.
   let face;
   try {
-    face = await verifyFace(req.body ?? {}, 'register', null);
+    face = await verifyFace(req.body ?? {}, 'register', null, req.header('user-agent'));
   } catch (e) {
     return faceError(res, e);
   }
@@ -902,7 +902,7 @@ app.post('/api/login/enroll-face', rateLimit(20, 60_000), async (req, res) => {
   if (loadTemplate(memberId)) return void res.status(409).json({ error: 'Wajah akun ini sudah terdaftar — silakan login.' });
   let face;
   try {
-    face = await verifyFace(req.body ?? {}, 'login', memberId);
+    face = await verifyFace(req.body ?? {}, 'login', memberId, req.header('user-agent'));
   } catch (e) {
     return faceError(res, e);
   }
@@ -925,7 +925,7 @@ app.post('/api/login/enroll-face', rateLimit(20, 60_000), async (req, res) => {
 app.post('/api/login/identify', rateLimit(20, 60_000), async (req, res) => {
   let face;
   try {
-    face = await verifyFace(req.body ?? {}, 'identify', null);
+    face = await verifyFace(req.body ?? {}, 'identify', null, req.header('user-agent'));
   } catch (e) {
     return faceError(res, e);
   }
@@ -1172,7 +1172,7 @@ app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
   // Bukti hadir = verifikasi wajah BARU saat absen (bukan sisa login pagi).
   let face;
   try {
-    face = await verifyFace(req.body ?? {}, 'absen', memberId);
+    face = await verifyFace(req.body ?? {}, 'absen', memberId, req.header('user-agent'));
   } catch (e) {
     return faceError(res, e);
   }

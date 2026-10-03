@@ -37,6 +37,11 @@ export type ChallengeReject = FrameReject | 'challenge' | 'frames' | 'not_fronta
 export interface ChallengeScores {
   liveFront: number | null; liveTurn: number | null;
   turnFront: number | null; turnTurn: number | null;
+  // Diagnosa FRAME DEPAN (tanpa gambar) — ukuran frame/box, skor tiap model,
+  // & kecerahan; nama harus cocok dgn kolom tabel face_checks.
+  frameW: number | null; frameH: number | null;
+  faceW: number | null; faceH: number | null;
+  liveV2: number | null; liveV1se: number | null; luma: number | null;
 }
 export type ChallengeOutcome =
   | { ok: true; front: FrameResult; turn: FrameResult; scores: ChallengeScores }
@@ -96,7 +101,11 @@ export async function addFrame(
 export async function runChallenge(
   challengeId: unknown, purpose: Purpose, memberId: string | null, frames: Buffer[] | null,
 ): Promise<ChallengeOutcome> {
-  const scores: ChallengeScores = { liveFront: null, liveTurn: null, turnFront: null, turnTurn: null };
+  const scores: ChallengeScores = {
+    liveFront: null, liveTurn: null, turnFront: null, turnTurn: null,
+    frameW: null, frameH: null, faceW: null, faceH: null,
+    liveV2: null, liveV1se: null, luma: null,
+  };
   const c = typeof challengeId === 'string' ? challenges.get(challengeId) : undefined;
   if (c) challenges.delete(challengeId as string);
   if (!c || c.exp < Date.now() || c.purpose !== purpose || c.memberId !== memberId) {
@@ -108,13 +117,27 @@ export async function runChallenge(
     const [frontBuf, ...turnBufs] = frames;
     [front, ...turns] = await Promise.all([analyzeFrame(frontBuf), ...turnBufs.map(analyzeFrame)]);
   } else {
-    if (!c.front || c.turns.length === 0) return { ok: false, reason: 'frames', msg: MSG.frames, scores };
+    // Tanpa frame menoleh tetap dinilai: frame depan yang gagal harus dapat alasan aslinya
+    // (HP berhenti sebelum menoleh), kalau depan lolos hasilnya no_turn.
+    if (!c.front) return { ok: false, reason: 'frames', msg: MSG.frames, scores };
     [front, ...turns] = await Promise.all([c.front, ...c.turns]);
   }
+  // Diagnosa frame depan (ukuran frame/box, skor tiap model, luma) untuk log.
+  const fillFrontDiag = (a: Analysis) => {
+    scores.frameW = a.diag.frameW;
+    scores.frameH = a.diag.frameH;
+    scores.faceW = a.diag.faceW;
+    scores.faceH = a.diag.faceH;
+    scores.liveV2 = a.diag.liveV2;
+    scores.liveV1se = a.diag.liveV1se;
+    scores.luma = a.diag.luma;
+  };
   if (!front.ok) {
+    fillFrontDiag(front);
     scores.liveFront = front.live ?? null;
     return { ok: false, reason: front.reason, msg: REJECT_MSG[front.reason], scores };
   }
+  fillFrontDiag(front);
   scores.liveFront = front.frame.live;
   scores.turnFront = front.frame.turn;
   if (Math.abs(front.frame.turn) > FACE_CFG.frontalMax) {

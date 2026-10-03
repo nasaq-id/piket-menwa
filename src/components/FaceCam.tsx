@@ -18,6 +18,53 @@ const TURN_MAX_MS = 4000;
 const TURN_MAX_FRAMES = 10;
 // Cadangan kalau kirim per frame gagal (server lama/jaringan): kirim sekaligus.
 const TURN_SHOTS_MS = [900, 1300, 1700, 2100, 2600, 3100];
+// Jeda supaya auto-exposure/fokus kamera stabil sebelum frame depan dinilai.
+const CAM_SETTLE_MS = 1500;
+// Kandidat frame depan: 3 potret berjarak ±150 ms, pilih yang paling tajam.
+const FRONT_CANDIDATES = 3;
+const FRONT_GAP_MS = 150;
+// Lebar gambar kecil untuk hitung ketajaman (varians Laplacian).
+const SHARP_W = 160;
+
+// Ketajaman kasar = varians Laplacian pada area tengah frame, grayscale,
+// disusutkan ke lebar ±160 px. Dipakai untuk memilih frame depan paling tajam.
+const frameSharpness = (v: HTMLVideoElement): number => {
+  const sw = v.videoWidth;
+  const sh = v.videoHeight;
+  if (!sw || !sh) return 0;
+  const w = Math.min(SHARP_W, sw);
+  const h = Math.max(1, Math.round(w * (sh / sw)));
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return 0;
+  // Crop area tengah (70%) supaya latar pinggir tidak mendominasi.
+  const cw = Math.round(sw * 0.7);
+  const ch = Math.round(sh * 0.7);
+  ctx.drawImage(v, Math.round((sw - cw) / 2), Math.round((sh - ch) / 2), cw, ch, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+  const g = new Float32Array(w * h);
+  for (let i = 0; i < g.length; i++) {
+    g[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+  }
+  // Laplacian 4-tetangga, lalu varians nilai turunannya.
+  let sum = 0;
+  let sum2 = 0;
+  let n = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const l = g[i - w] + g[i + w] + g[i - 1] + g[i + 1] - 4 * g[i];
+      sum += l;
+      sum2 += l * l;
+      n++;
+    }
+  }
+  if (n === 0) return 0;
+  const mean = sum / n;
+  return sum2 / n - mean * mean;
+};
 
 export function FaceCam({ title, autoStart = false, getChallenge, submit, onClose }: {
   title: string;
@@ -32,6 +79,8 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
   const [action, setAction] = useState<FaceAction | null>(null);
   const [msg, setMsg] = useState('Meminta izin kamera…');
   const alive = useRef(true);
+  // Waktu (performance.now) video benar-benar mulai jalan → dasar jeda stabil.
+  const startedAt = useRef(0);
 
   useEffect(() => {
     alive.current = true;
@@ -49,8 +98,9 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
         if (!v) return;
         v.srcObject = stream;
         await v.play();
+        startedAt.current = performance.now();
         setPhase('ready');
-        setMsg(autoStart ? 'Posisikan wajah di dalam oval…' : 'Posisikan wajah di dalam oval, lalu tap Mulai.');
+        setMsg(autoStart ? 'Posisikan wajah di dalam oval, jarak ±30–40 cm…' : 'Posisikan wajah di dalam oval, jarak ±30–40 cm, lalu tap Mulai.');
       } catch (e) {
         if (!alive.current) return;
         const name = (e as Error).name;
@@ -85,6 +135,25 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
   const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const vib = (p: number | number[]) => { try { navigator.vibrate?.(p); } catch { /* opsional */ } };
 
+  // Tunggu kamera stabil (auto-exposure/fokus) lalu ambil 3 kandidat frame depan
+  // (±150 ms) dan pilih yang paling tajam. Hasil kirim tetap grab() resolusi penuh.
+  const grabFront = async (): Promise<string | null> => {
+    const sisa = CAM_SETTLE_MS - (performance.now() - startedAt.current);
+    if (sisa > 0) await wait(sisa);
+    // Simpan dataURL + skor tiap kandidat, lalu pilih yang tertinggi.
+    const kandidat: { data: string; sharp: number }[] = [];
+    for (let i = 0; i < FRONT_CANDIDATES; i++) {
+      if (i > 0) await wait(FRONT_GAP_MS);
+      if (!alive.current) return null;
+      const v = videoRef.current;
+      if (!v?.videoWidth) continue;
+      const data = grab();
+      if (data) kandidat.push({ data, sharp: frameSharpness(v) });
+    }
+    if (kandidat.length === 0) return grab();
+    return kandidat.reduce((a, b) => (b.sharp > a.sharp ? b : a)).data;
+  };
+
   const run = async () => {
     warmAudio();
     setAction(null);
@@ -97,8 +166,7 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
       setMsg(ch.error);
       return;
     }
-    await wait(400);
-    const front = grab();
+    const front = await grabFront();
     if (!front) {
       setPhase('error');
       setMsg('Kamera belum siap — coba lagi.');
@@ -191,10 +259,10 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
           <div className="camview">
             <video ref={videoRef} playsInline muted autoPlay />
             <svg className="ovalsvg" viewBox="0 0 100 140" preserveAspectRatio="none">
-              <ellipse cx="50" cy="60" rx="30" ry="42" className="ovbg" />
+              <ellipse cx="50" cy="60" rx="24" ry="33" className="ovbg" />
               {(busy || phase === 'done') && (
                 <motion.ellipse
-                  cx="50" cy="60" rx="30" ry="42" className={ovalClass}
+                  cx="50" cy="60" rx="24" ry="33" className={ovalClass}
                   pathLength={100} strokeDasharray="100"
                   // Oval "menggambar diri" selama scan; penuh + menyala saat berhasil.
                   initial={{ strokeDashoffset: 100 }}

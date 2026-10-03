@@ -183,6 +183,15 @@ export const faceChecks = sqliteTable('face_checks', {
   turnFront: real('turn_front'),
   turnTurn: real('turn_turn'),
   similarity: real('similarity'), // ke template terdaftar (login/absen) atau duplikat tertinggi (daftar)
+  // Diagnosa FRAME DEPAN (tanpa gambar) — untuk memastikan penyebab kegagalan.
+  frameW: integer('frame_w'),
+  frameH: integer('frame_h'),
+  faceW: integer('face_w'),
+  faceH: integer('face_h'),
+  liveV2: real('live_v2'), // skor MiniFASNetV2
+  liveV1se: real('live_v1se'), // skor MiniFASNetV1SE
+  luma: real('luma'), // rata-rata kecerahan 0..255 area box wajah
+  ua: text('ua'), // User-Agent (dipotong 160 karakter)
 });
 
 // Penjaga salah PIN admin/superadmin. key = 'm:<memberId>' (member yang sedang
