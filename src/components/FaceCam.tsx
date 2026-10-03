@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, RotateCw, ScanFace } from 'lucide-react';
 import { tingStage, warmAudio } from '../face';
-import type { FaceAction } from '../api';
+import { sendFaceFrame, type FaceAction } from '../api';
 import { TAP } from './Motion';
 
 // Scan wajah challenge-response: HP cuma memotret, SERVER yang menilai
@@ -10,8 +10,13 @@ import { TAP } from './Motion';
 // arah acak → tolehkan kepala → beberapa frame dikirim.
 type Phase = 'starting' | 'ready' | 'front' | 'turn' | 'sending' | 'done' | 'error' | 'failed';
 
-// Jeda pengambilan frame setelah instruksi menoleh muncul (ms). Sampai ~3 detik
-// supaya yang telat menoleh tetap tertangkap saat kepala sudah diam (tidak buram).
+// Frame menoleh dikirim satu per satu mulai TURN_START_MS setelah panah muncul;
+// berhenti begitu server bilang sudah cukup menoleh, paling lama TURN_MAX_MS.
+const TURN_START_MS = 500;
+const TURN_GAP_MS = 150;
+const TURN_MAX_MS = 4000;
+const TURN_MAX_FRAMES = 10;
+// Cadangan kalau kirim per frame gagal (server lama/jaringan): kirim sekaligus.
 const TURN_SHOTS_MS = [900, 1300, 1700, 2100, 2600, 3100];
 
 export function FaceCam({ title, autoStart = false, getChallenge, submit, onClose }: {
@@ -104,18 +109,42 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
     setAction(ch.action);
     setPhase('turn');
     setMsg(ch.action === 'kiri' ? 'Tolehkan kepala ke KIRI' : 'Tolehkan kepala ke KANAN');
-    const turns: string[] = [];
-    let t0 = 0;
-    for (const at of TURN_SHOTS_MS) {
-      await wait(at - t0);
-      t0 = at;
+    // Frame depan dinilai sambil user mulai menoleh.
+    let stop = false;
+    const frontSent = sendFaceFrame(ch.challengeId, 'front', front).then((r) => {
+      if (r?.stop) stop = true;
+      return r;
+    });
+    const t0 = performance.now();
+    let streamed = true;
+    let sent = 0;
+    await wait(TURN_START_MS);
+    while (!stop && alive.current && sent < TURN_MAX_FRAMES && performance.now() - t0 < TURN_MAX_MS) {
       const f = grab();
-      if (f) turns.push(f);
+      const r = f ? await sendFaceFrame(ch.challengeId, 'turn', f) : null;
+      if (!r) { streamed = false; break; }
+      sent++;
+      if (r.stop) break;
+      await wait(TURN_GAP_MS);
+    }
+    if (streamed && !(await frontSent)) streamed = false;
+    let frames: string[] = [];
+    if (!streamed) {
+      // Cadangan: potret ulang dengan jadwal tetap, kirim sekaligus.
+      const turns: string[] = [];
+      let at0 = 0;
+      for (const at of TURN_SHOTS_MS) {
+        await wait(at - at0);
+        at0 = at;
+        const f = grab();
+        if (f) turns.push(f);
+      }
+      frames = [front, ...turns];
     }
     if (!alive.current) return;
     setPhase('sending');
     setMsg('Memverifikasi…');
-    const r = await submit(ch.challengeId, [front, ...turns]);
+    const r = await submit(ch.challengeId, frames);
     if (!alive.current) return;
     if (r.ok) {
       tingStage(2);

@@ -393,6 +393,23 @@ export async function requestChallenge(
   return r.ok ? { ok: true, ...r.data } : r;
 }
 
+// Kirim 1 frame scan (front/turn) — server langsung menilai. turned/stop =
+// petunjuk kapan berhenti memotret; keputusan akhir tetap di endpoint tujuan.
+export async function sendFaceFrame(
+  challengeId: string, kind: 'front' | 'turn', frame: string,
+): Promise<{ turned: boolean; stop: boolean } | null> {
+  try {
+    const r = await fetch('/api/face/frame', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeId, kind, frame }),
+    });
+    return r.ok ? ((await r.json()) as { turned: boolean; stop: boolean }) : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface AttRow {
   id: number; tanggal: string; memberId: string; jam: string; createdAt: number;
   status: 'tepat' | 'terlambat'; jarakM: number | null; // jarak ke mako saat absen

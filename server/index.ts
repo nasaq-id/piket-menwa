@@ -13,7 +13,7 @@ import {
 import { detectFaces, similarity } from './face/compreface.ts';
 import { livenessScore } from './face/liveness.ts';
 import { FACE_CFG, bestMatch } from './face/pipeline.ts';
-import { issueChallenge, parseFrames, runChallenge, type ChallengeOutcome, type Purpose } from './face/challenge.ts';
+import { addFrame, issueChallenge, parseFrame, parseFrames, runChallenge, type ChallengeOutcome, type Purpose } from './face/challenge.ts';
 import { allTemplates, loadTemplate, logCheck, saveTemplate } from './face/templates.ts';
 import { CompreFaceError } from './face/compreface.ts';
 
@@ -710,8 +710,10 @@ const faceError = (res: import('express').Response, e: unknown) => {
 const verifyFace = async (
   body: { challengeId?: unknown; frames?: unknown }, purpose: Purpose, memberId: string | null,
 ): Promise<{ ok: true; out: Extract<ChallengeOutcome, { ok: true }> } | { ok: false; status: number; error: string }> => {
-  const frames = parseFrames(body.frames);
-  if (!frames) return { ok: false, status: 400, error: 'Data kamera tidak lengkap — coba lagi.' };
+  // frames = [] → frame sudah dikirim satu per satu lewat /api/face/frame.
+  const streamed = Array.isArray(body.frames) && body.frames.length === 0;
+  const frames = streamed ? null : parseFrames(body.frames);
+  if (!streamed && !frames) return { ok: false, status: 400, error: 'Data kamera tidak lengkap — coba lagi.' };
   const out = await runChallenge(body.challengeId, purpose, memberId, frames);
   if (!out.ok) {
     logCheck({ purpose, memberId, ok: false, reason: out.reason, scores: out.scores });
@@ -730,6 +732,20 @@ const faceOwner = (frame: Parameters<typeof bestMatch>[0], exceptId?: string) =>
   }
   return top;
 };
+
+// Frame scan dikirim satu per satu (frame depan, lalu frame menoleh) supaya HP
+// bisa berhenti begitu sudah cukup menoleh — tidak menunggu durasi tetap.
+app.post('/api/face/frame', rateLimit(240, 60_000), async (req, res) => {
+  const { challengeId, kind, frame } = (req.body ?? {}) as { challengeId?: unknown; kind?: unknown; frame?: unknown };
+  const buf = parseFrame(frame);
+  if (!buf) return void res.status(400).json({ error: 'Data kamera tidak lengkap — coba lagi.' });
+  try {
+    const r = await addFrame(challengeId, kind, buf);
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (e) {
+    faceError(res, e);
+  }
+});
 
 app.post('/api/face/challenge', rateLimit(30, 60_000), (req, res) => {
   const { purpose, preToken, memberId, attest } = (req.body ?? {}) as {

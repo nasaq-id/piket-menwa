@@ -13,9 +13,15 @@ export type Purpose = 'register' | 'login' | 'identify' | 'absen';
 export type Action = 'kiri' | 'kanan';
 
 const TTL_MS = 30_000;
-const MAX_TURN_FRAMES = 6;
+const MAX_TURN_FRAMES = 10;
 
-interface Challenge { purpose: Purpose; memberId: string | null; action: Action; exp: number }
+type Analysis = Awaited<ReturnType<typeof analyzeFrame>>;
+// front/turns terisi kalau HP mengirim frame satu per satu (POST /api/face/frame):
+// tiap frame langsung dinilai, HP berhenti begitu sudah cukup menoleh.
+interface Challenge {
+  purpose: Purpose; memberId: string | null; action: Action; exp: number;
+  front?: Promise<Analysis>; turns: Promise<Analysis>[];
+}
 const challenges = new Map<string, Challenge>();
 
 export function issueChallenge(purpose: Purpose, memberId: string | null) {
@@ -23,7 +29,7 @@ export function issueChallenge(purpose: Purpose, memberId: string | null) {
   for (const [k, c] of challenges) if (c.exp < now) challenges.delete(k);
   const id = randomBytes(16).toString('hex');
   const action: Action = randomInt(2) === 0 ? 'kiri' : 'kanan';
-  challenges.set(id, { purpose, memberId, action, exp: now + TTL_MS });
+  challenges.set(id, { purpose, memberId, action, exp: now + TTL_MS, turns: [] });
   return { challengeId: id, action, ttlMs: TTL_MS };
 }
 
@@ -45,25 +51,50 @@ const MSG: Record<Exclude<ChallengeReject, FrameReject>, string> = {
 };
 
 /** Decode dataURL JPEG/PNG/WebP → Buffer (maks ~2MB per frame). */
+export function parseFrame(f: unknown): Buffer | null {
+  const m = typeof f === 'string' ? /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(f) : null;
+  if (!m) return null;
+  const buf = Buffer.from(m[2], 'base64');
+  return buf.length === 0 || buf.length > 2 * 1024 * 1024 ? null : buf;
+}
 export function parseFrames(frames: unknown): Buffer[] | null {
   if (!Array.isArray(frames) || frames.length < 2 || frames.length > 1 + MAX_TURN_FRAMES) return null;
-  const out: Buffer[] = [];
-  for (const f of frames) {
-    const m = typeof f === 'string' ? /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(f) : null;
-    if (!m) return null;
-    const buf = Buffer.from(m[2], 'base64');
-    if (buf.length === 0 || buf.length > 2 * 1024 * 1024) return null;
-    out.push(buf);
+  const out = frames.map(parseFrame);
+  return out.every((b): b is Buffer => b !== null) ? out : null;
+}
+
+/**
+ * Kirim frame satu per satu. Hasil cuma petunjuk untuk HP kapan berhenti
+ * (turned / frame depan ditolak); keputusan tetap di runChallenge.
+ */
+export async function addFrame(
+  challengeId: unknown, kind: unknown, buf: Buffer,
+): Promise<{ ok: true; turned: boolean; stop: boolean } | { ok: false; error: string }> {
+  const c = typeof challengeId === 'string' ? challenges.get(challengeId) : undefined;
+  if (!c || c.exp < Date.now()) return { ok: false, error: MSG.challenge };
+  if (kind === 'front') {
+    if (c.front) return { ok: false, error: MSG.frames };
+    c.front = analyzeFrame(buf);
+    const a = await c.front;
+    // Frame depan gagal → percuma lanjut menoleh; HP langsung minta keputusan.
+    return { ok: true, turned: false, stop: !a.ok || Math.abs(a.frame.turn) > FACE_CFG.frontalMax };
   }
-  return out;
+  if (kind !== 'turn' || c.turns.length >= MAX_TURN_FRAMES) return { ok: false, error: MSG.frames };
+  const p = analyzeFrame(buf);
+  c.turns.push(p);
+  const a = await p;
+  const want = c.action === 'kiri' ? 1 : -1;
+  const turned = a.ok && a.frame.turn * want >= FACE_CFG.turnMin;
+  return { ok: true, turned, stop: turned || (!a.ok && a.reason === 'multi_face') };
 }
 
 /**
  * frames[0] = menghadap depan, frames[1..] = setelah instruksi menoleh.
+ * frames = null → pakai frame yang sudah dikirim satu per satu lewat addFrame.
  * Challenge dikonsumsi (sekali pakai) walau hasilnya gagal.
  */
 export async function runChallenge(
-  challengeId: unknown, purpose: Purpose, memberId: string | null, frames: Buffer[],
+  challengeId: unknown, purpose: Purpose, memberId: string | null, frames: Buffer[] | null,
 ): Promise<ChallengeOutcome> {
   const scores: ChallengeScores = { liveFront: null, liveTurn: null, turnFront: null, turnTurn: null };
   const c = typeof challengeId === 'string' ? challenges.get(challengeId) : undefined;
@@ -71,8 +102,15 @@ export async function runChallenge(
   if (!c || c.exp < Date.now() || c.purpose !== purpose || c.memberId !== memberId) {
     return { ok: false, reason: 'challenge', msg: MSG.challenge, scores };
   }
-  const [frontBuf, ...turnBufs] = frames;
-  const [front, ...turns] = await Promise.all([analyzeFrame(frontBuf), ...turnBufs.map(analyzeFrame)]);
+  let front: Analysis;
+  let turns: Analysis[];
+  if (frames) {
+    const [frontBuf, ...turnBufs] = frames;
+    [front, ...turns] = await Promise.all([analyzeFrame(frontBuf), ...turnBufs.map(analyzeFrame)]);
+  } else {
+    if (!c.front || c.turns.length === 0) return { ok: false, reason: 'frames', msg: MSG.frames, scores };
+    [front, ...turns] = await Promise.all([c.front, ...c.turns]);
+  }
   if (!front.ok) {
     scores.liveFront = front.live ?? null;
     return { ok: false, reason: front.reason, msg: REJECT_MSG[front.reason], scores };
