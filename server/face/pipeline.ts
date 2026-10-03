@@ -57,5 +57,5 @@ export const REJECT_MSG: Record<FrameReject, string> = {
   no_face: 'Wajah tidak terdeteksi — pastikan wajah terlihat jelas dan cukup cahaya.',
   multi_face: 'Terdeteksi lebih dari satu wajah — pastikan hanya kamu di depan kamera.',
   too_small: 'Wajah terlalu jauh — dekatkan HP ke wajah.',
-  spoof: 'Wajah terdeteksi bukan wajah asli (foto/layar). Hadapkan wajah langsung ke kamera.',
+  spoof: 'Wajah tidak lolos cek wajah asli. Cari tempat yang terang, tahan HP diam, lalu coba lagi.',
 };

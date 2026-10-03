@@ -10,8 +10,9 @@ import { TAP } from './Motion';
 // arah acak → tolehkan kepala → beberapa frame dikirim.
 type Phase = 'starting' | 'ready' | 'front' | 'turn' | 'sending' | 'done' | 'error' | 'failed';
 
-// Jeda pengambilan frame setelah instruksi menoleh muncul (ms).
-const TURN_SHOTS_MS = [900, 1300, 1700, 2100];
+// Jeda pengambilan frame setelah instruksi menoleh muncul (ms). Sampai ~3 detik
+// supaya yang telat menoleh tetap tertangkap saat kepala sudah diam (tidak buram).
+const TURN_SHOTS_MS = [900, 1300, 1700, 2100, 2600, 3100];
 
 export function FaceCam({ title, autoStart = false, getChallenge, submit, onClose }: {
   title: string;
@@ -169,7 +170,7 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
                   // Oval "menggambar diri" selama scan; penuh + menyala saat berhasil.
                   initial={{ strokeDashoffset: 100 }}
                   animate={{ strokeDashoffset: phase === 'front' ? 70 : phase === 'turn' ? 35 : 0 }}
-                  transition={{ duration: phase === 'turn' ? 2 : 0.4, ease: 'easeOut' }}
+                  transition={{ duration: phase === 'turn' ? 3 : 0.4, ease: 'easeOut' }}
                 />
               )}
             </svg>

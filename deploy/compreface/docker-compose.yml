@@ -27,13 +27,13 @@ services:
       - POSTGRES_PASSWORD=${CF_DB_PASSWORD}
       - POSTGRES_URL=jdbc:postgresql://cf-db:5432/frs
       - SPRING_PROFILES_ACTIVE=dev
-      - API_JAVA_OPTS=-Xmx256m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
+      - API_JAVA_OPTS=-Xmx512m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
       - SAVE_IMAGES_TO_DB=false
       - MAX_FILE_SIZE=5MB
       - MAX_REQUEST_SIZE=10MB
       - CONNECTION_TIMEOUT=10000
       - READ_TIMEOUT=60000
-    mem_limit: 640m
+    mem_limit: 896m
   compreface-core:
     # nama service HARUS "compreface-core": compreface-api memanggil core lewat hostname ini
     image: exadel/compreface-core:1.2.0-mobilenet
@@ -41,6 +41,7 @@ services:
     environment:
       - ML_PORT=3000
       - IMG_LENGTH_LIMIT=640
-      - UWSGI_PROCESSES=1
+      # 2 proses = sama dengan dev laptop; frame satu scan dinilai paralel.
+      - UWSGI_PROCESSES=2
       - UWSGI_THREADS=1
-    mem_limit: 768m
+    mem_limit: 1280m

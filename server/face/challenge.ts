@@ -13,7 +13,7 @@ export type Purpose = 'register' | 'login' | 'identify' | 'absen';
 export type Action = 'kiri' | 'kanan';
 
 const TTL_MS = 30_000;
-const MAX_TURN_FRAMES = 4;
+const MAX_TURN_FRAMES = 6;
 
 interface Challenge { purpose: Purpose; memberId: string | null; action: Action; exp: number }
 const challenges = new Map<string, Challenge>();
@@ -88,18 +88,22 @@ export async function runChallenge(
   let best: FrameResult | null = null;
   for (const t of turns) {
     if (!t.ok) {
-      if (t.reason === 'spoof' || t.reason === 'multi_face') spoof ??= t;
+      // Ada wajah lain di frame mana pun = tolak seluruh scan.
+      if (t.reason === 'multi_face') return { ok: false, reason: t.reason, msg: REJECT_MSG[t.reason], scores };
+      if (t.reason === 'spoof') spoof ??= t;
       continue;
     }
-    scores.liveTurn = t.frame.live;
-    scores.turnTurn = t.frame.turn;
-    if (t.frame.turn * want >= FACE_CFG.turnMin) {
-      best = t.frame;
-      break;
+    // Log: frame yang paling jauh menoleh ke arah yang diminta.
+    if (scores.turnTurn === null || t.frame.turn * want > scores.turnTurn * want) {
+      scores.turnTurn = t.frame.turn;
+      scores.liveTurn = t.frame.live;
     }
+    if (!best && t.frame.turn * want >= FACE_CFG.turnMin) best = t.frame;
   }
-  // Satu frame palsu/ada wajah lain saja sudah cukup untuk menolak seluruh scan.
-  if (spoof) {
+  // Frame bukti (depan + menoleh) WAJIB lolos liveness penuh (batas tidak
+  // diturunkan). Frame di tengah gerakan kepala sering buram → skornya turun;
+  // frame itu diabaikan selama ada frame menoleh lain yang lolos penuh.
+  if (!best && spoof) {
     scores.liveTurn = spoof.live ?? scores.liveTurn;
     return { ok: false, reason: spoof.reason, msg: REJECT_MSG[spoof.reason], scores };
   }
