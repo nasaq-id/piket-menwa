@@ -17,7 +17,7 @@ const todayLong = () => {
 export function HariTab({ store }: { store: AppStore }) {
   const {
     today, crew, att, members, nama, warna, jamHari, mySlots, me, unlocked, absenBusy,
-    needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef, doneCount,
+    faceEnabled, needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef, doneCount,
     pendingTugas, onFile, bdDone, bdOpen, setBdOpen, bdSecOpen, setBdSecOpen,
     nilaiHariIni, lapsit, lapsitText, setLapsitText, kirimLapsit, lapsitOpen,
     lapsitOpenAt, jamSelesaiHariIni, tmr, crewBesok, state, setPreview,
@@ -93,7 +93,7 @@ export function HariTab({ store }: { store: AppStore }) {
             {
               id: 'absen',
               label: 'Absen',
-              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? ' · terlambat' : ''}` : 'scan wajah',
+              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? ' · terlambat' : ''}` : faceEnabled ? 'scan wajah' : 'scan QR',
               done: unlocked,
             },
             { id: 'bukti', label: 'Bukti', sub: `${ev.length}/${checks.length}`, done: buktiLengkap },
@@ -123,12 +123,12 @@ export function HariTab({ store }: { store: AppStore }) {
                   variant="primary"
                   busy={absenBusy}
                   onClick={() => void needVerify()}
-                  ariaLabel="Absen tiba dengan scan wajah di mako"
+                  ariaLabel={faceEnabled ? 'Absen tiba dengan scan wajah di mako' : 'Absen tiba dengan scan QR di mako'}
                   className="blockbtn"
                 >
                   {absenBusy
                     ? <><MapPin size={15} /> Mengecek lokasi…</>
-                    : <><Camera size={15} /> Absen tiba (scan wajah di mako)</>}
+                    : <><Camera size={15} /> Absen tiba ({faceEnabled ? 'scan wajah' : 'scan QR'} di mako)</>}
                 </Button>
                 {jamMulai && (
                   <p className="hint">

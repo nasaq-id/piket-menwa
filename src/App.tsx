@@ -4,6 +4,7 @@ import { AppHeader } from './components/AppHeader';
 import { BottomTabs } from './components/BottomTabs';
 import { ConfirmSheet } from './components/ConfirmSheet';
 import { FaceCam } from './components/FaceCam';
+import { QrSheet } from './components/QrSheet';
 import { KontakSheet } from './components/KontakSheet';
 import { LogoutSheet } from './components/LogoutSheet';
 import { PhotoPreview } from './components/PhotoPreview';
@@ -54,8 +55,8 @@ export default function App() {
     return (
       <div className="phone tac">
         {profiling
-          ? <ProfilePage onDone={store.onProfileDone} onCancel={() => store.setProfiling(false)} names={members.map((m) => m.nama)} existing={members.map((m) => ({ nama: m.nama, angkatan: m.angkatan }))} scanning={cam?.mode === 'register'} />
-          : <WelcomePage onLogin={store.credLogin} onFaceLogin={store.faceLogin} onRegister={() => store.setProfiling(true)} />}
+          ? <ProfilePage onDone={store.onProfileDone} onCancel={() => store.setProfiling(false)} names={members.map((m) => m.nama)} existing={members.map((m) => ({ nama: m.nama, angkatan: m.angkatan }))} scanning={cam?.mode === 'register'} faceEnabled={store.faceEnabled} busyRegister={store.regBusy} />
+          : <WelcomePage onLogin={store.credLogin} onFaceLogin={store.faceLogin} onRegister={() => store.setProfiling(true)} faceEnabled={store.faceEnabled} />}
         <AnimatePresence>{camModal}</AnimatePresence>
         <AnimatePresence>
           {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}
@@ -142,6 +143,9 @@ export default function App() {
       </main>
 
       <AnimatePresence>{camModal}</AnimatePresence>
+      <AnimatePresence>
+        {store.qrOpen && <QrSheet onSubmit={store.submitQr} onClose={() => store.setQrOpen(false)} />}
+      </AnimatePresence>
       <AnimatePresence>
         {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}
       </AnimatePresence>

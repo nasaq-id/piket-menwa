@@ -4,7 +4,7 @@ import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
   dropPush, ensurePush, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
   loadNilaiToday, requestChallenge,
-  loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginEnrollFace, loginIdentify, markAttendance, ping,
+  loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginEnrollFace, loginIdentify, markAttendance, markAttendanceQr, ping,
   registerMember, saveRosterRemote, saveWeekRosterRemote, setKontak, setLoginSecret, setProfilePhoto, submitLapsit,
   toggleBreakdown, uploadEvidence, verifyPin,
   type AppState, type AttRow, type AuthType, type EvidenceRow, type FaceSummary, type LapsitRow,
@@ -12,6 +12,7 @@ import {
 } from '../api';
 import { getGeo, compressPhoto, stampPhoto, type Geo } from '../bukti';
 import { ting } from '../face';
+import { captureQrFromUrl, clearSavedQr, getSavedQr, saveQr } from '../qr';
 import { angkatanFromNbp, profileSchema, type Profile } from '../Welcome';
 import { DAYS, dateStr, load, pinSalahMsg, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
 
@@ -23,6 +24,10 @@ export interface PreviewState { file: string; judul: string; by: string; tanggal
 export function useAppStore() {
   const [tab, setTab] = useState<Tab>('hari');
   const [state, setState] = useState<AppState | null>(null);
+  // false = verifikasi wajah dimatikan server: login PIN, absen QR mako + geofence.
+  const faceEnabled = state?.faceEnabled ?? false;
+  const [qrOpen, setQrOpen] = useState(false);
+  const [regBusy, setRegBusy] = useState(false);
   const [checks, setChecks] = useState<TaskRow[]>([]);
   const [ev, setEv] = useState<EvidenceRow[]>([]);
   const [uploadingTugas, setUploadingTugas] = useState<string | null>(null);
@@ -120,6 +125,7 @@ export function useAppStore() {
   };
 
   const faceLogin = () => {
+    if (!faceEnabled) return;
     if (!state?.fromApi) {
       setToast({ msg: 'Butuh online untuk masuk.', kind: 'error' });
       return;
@@ -180,6 +186,10 @@ export function useAppStore() {
   const [dragSaving, setDragSaving] = useState(false);
 
   useEffect(() => { save('piket-me', me); }, [me]);
+  useEffect(() => {
+    // QR mako discan pakai kamera bawaan HP → URL ?absen=<token> → simpan untuk absen.
+    if (captureQrFromUrl()) setToast({ msg: 'QR mako terbaca — masuk, lalu tekan Absen.', kind: 'info' });
+  }, []);
   useEffect(() => {
     try {
       if (me) localStorage.setItem('piket-me-date', dateStr(0));
@@ -556,7 +566,36 @@ export function useAppStore() {
     }
     absenGeoRef.current = g;
     setGeo(g);
-    setCam({ mode: 'absen' });
+    if (faceEnabled) return setCam({ mode: 'absen' });
+    // Tanpa wajah: pakai QR yang sudah discan lewat kamera HP, kalau tidak ada / salah → buka pemindai.
+    const saved = getSavedQr();
+    if (saved && (await submitQr(saved)).ok) return;
+    setQrOpen(true);
+  };
+
+  const afterAbsen = async (r: { jam?: string; status?: AttRow['status'] }) => {
+    const a = await loadAttendance(dateStr(0), dateStr(0));
+    if (a) setAtt(a);
+    setToast({
+      msg: r.status === 'terlambat'
+        ? `Absen tercatat ${r.jam ?? ''} — TERLAMBAT. Checklist & bukti terbuka.`
+        : `Absen tercatat ${r.jam ?? ''} — tepat waktu. Checklist & bukti terbuka.`,
+      kind: r.status === 'terlambat' ? 'info' : 'ok',
+    });
+    void ensurePush(me);
+  };
+
+  // Absen QR: token dari QR mako + lokasi (geofence) yang diambil saat tombol Absen ditekan.
+  const submitQr = async (token: string): Promise<{ ok: boolean; error?: string }> => {
+    const r = await markAttendanceQr(dateStr(0), me, token, absenGeoRef.current);
+    if (!r.ok) {
+      if (/QR/.test(r.error)) clearSavedQr();
+      return r;
+    }
+    saveQr(token);
+    setQrOpen(false);
+    await afterAbsen(r);
+    return { ok: true };
   };
 
   const logout = () => {
@@ -570,7 +609,12 @@ export function useAppStore() {
   // Wizard tetap terpasang di bawah kamera: scan ditutup/gagal → isian utuh.
   const onProfileDone = (p: Profile) => {
     setRegProfile(p);
-    setCam({ mode: 'register' });
+    if (faceEnabled) return setCam({ mode: 'register' });
+    setRegBusy(true);
+    void finishRegister(p).then((r) => {
+      setRegBusy(false);
+      if (!r.ok) setToast({ msg: r.error ?? 'Gagal daftar.', kind: 'error' });
+    });
   };
 
   // ---- Scan wajah: tiap mode punya cara minta challenge & kirim frame ----
@@ -611,20 +655,17 @@ export function useAppStore() {
     if (cam?.mode === 'absen') {
       const r = await markAttendance(dateStr(0), me, challengeId, frames, absenGeoRef.current);
       if (!r.ok) return r;
-      const a = await loadAttendance(dateStr(0), dateStr(0));
-      if (a) setAtt(a);
       setCam(null);
-      setToast({
-        msg: r.status === 'terlambat'
-          ? `Absen tercatat ${r.jam ?? ''} — TERLAMBAT. Checklist & bukti terbuka.`
-          : `Absen tercatat ${r.jam ?? ''} — tepat waktu. Checklist & bukti terbuka.`,
-        kind: r.status === 'terlambat' ? 'info' : 'ok',
-      });
-      void ensurePush(me);
+      await afterAbsen(r);
       return { ok: true };
     }
     // register
-    const parsed = profileSchema.safeParse(regProfile);
+    return finishRegister(regProfile, challengeId, frames);
+  };
+
+  // Daftar: langkah terakhir wizard. Dengan wajah → dipanggil dari faceSubmit; tanpa → langsung.
+  const finishRegister = async (profile: unknown, challengeId?: string, frames?: string[]): Promise<{ ok: boolean; error?: string }> => {
+    const parsed = profileSchema.safeParse(profile);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Profil invalid.' };
     const res = await registerMember(parsed.data, challengeId, frames);
     if (!res.ok || !res.memberId) return { ok: false, error: res.error ?? 'Gagal daftar.' };
@@ -925,6 +966,7 @@ export function useAppStore() {
     weekOff, setWeekOff, weekStat, expanded, setExpanded, pickDay, setPickDay,
     weekLoading, dragSchedule, dragDirty, dragSaving, weekOverridden,
     me, setMe, faces, att, unlocked, absenBusy, cam, setCam,
+    faceEnabled, qrOpen, setQrOpen, submitQr, regBusy,
     toast, setToast, profiling, setProfiling,
     navHidden, showLogout, setShowLogout, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, saveSecret,
     showKontak, setShowKontak, saveKontak,

@@ -9,6 +9,7 @@ import {
 import { dateStr, pinSalahMsg } from './piket';
 import { BREAKDOWN } from './breakdown';
 import { MakoPanel } from './components/MakoPanel';
+import { QrPanel } from './components/QrPanel';
 import { Button } from './components/Button';
 import { ConfirmSheet } from './components/ConfirmSheet';
 import { Empty } from './components/Empty';
@@ -500,6 +501,7 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
             <>
               <h2>Pengaturan absen</h2>
               <MakoPanel />
+              <QrPanel ask={ask} />
             </>
           )}
         </motion.div>

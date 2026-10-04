@@ -149,9 +149,10 @@ const saveLoginPref = (m: 'face' | 'manual') => {
 // Contoh dummy untuk placeholder login (BUKAN data nyata), tampil bergantian.
 const LOGIN_CONTOH = ['1494.08.10001', '081234567890', 'rajawali'];
 const LOGIN_STATIS = 'NBP, No. WA, atau alias';
-export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
+export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
   onLogin: (ident: string, secret: string) => Promise<{ ok: boolean; error?: string }>;
   onFaceLogin: () => void; onRegister: () => void;
+  faceEnabled: boolean; // false = hanya login NBP/WA + PIN (verifikasi wajah dimatikan server)
 }) {
   // Slot logo: taruh file di public/brand/logo-menwa.png → otomatis kepakai.
   // Belum ada file = fallback ikon Shield.
@@ -161,7 +162,8 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
   const [authType, setAuthType] = useState<AuthType>(loadAuthPref);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(loadManualPref);
+  const [showFormPref, setShowForm] = useState(loadManualPref);
+  const showForm = !faceEnabled || showFormPref;
   // Tanpa animasi gerak: placeholder login statis.
   const [kurangiGerak, setKurangiGerak] = useState(
     () => typeof window !== 'undefined'
@@ -267,9 +269,11 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
           <Button variant="primary" type="submit" busy={busy}>
             <KeyRound size={18} /> Masuk
           </Button>
-          <button type="button" className="wlink loginswitch" onClick={() => { setShowForm(false); setErr(null); }}>
-            <ScanFace size={14} /> Masuk dengan wajah saja
-          </button>
+          {faceEnabled && (
+            <button type="button" className="wlink loginswitch" onClick={() => { setShowForm(false); setErr(null); }}>
+              <ScanFace size={14} /> Masuk dengan wajah saja
+            </button>
+          )}
         </motion.form>
         )}
       </AnimatePresence>
@@ -284,7 +288,7 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister }: {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.35, delay: 0.4 }}
         >
-          Foto wajah dipakai untuk login & absen. Foto tidak disimpan.
+          {faceEnabled ? 'Foto wajah dipakai untuk login & absen. Foto tidak disimpan.' : 'Absen piket: scan QR yang ditempel di mako.'}
         </motion.p>
       </footer>
     </motion.div>
@@ -380,7 +384,6 @@ export function WaField({ value, onChange, onEnter }: { value: string; onChange:
 // supaya isian tidak hilang kalau scan ditutup/gagal.
 const STEP_LABELS = ['Nama Lengkap', 'Alias', 'NBP', 'Jabatan', 'No. WhatsApp', 'PIN / Password', 'Persetujuan Data Wajah', 'Scan Wajah'];
 const S = { nama: 0, alias: 1, nbp: 2, jabatan: 3, wa: 4, secret: 5, consent: 6 } as const;
-const LAST = S.consent; // langkah form terakhir; sesudahnya kamera
 const stepSchemas: Partial<Record<number, z.ZodType>> = {
   [S.nama]: profileSchema.shape.nama,
   [S.alias]: aliasSchema,
@@ -391,13 +394,16 @@ const stepSchemas: Partial<Record<number, z.ZodType>> = {
 const stepCheck: Partial<Record<number, 'alias' | 'nbp' | 'wa'>> = { [S.alias]: 'alias', [S.nbp]: 'nbp', [S.wa]: 'wa' };
 const CHECK_LABEL = { alias: 'Alias', nbp: 'NBP', wa: 'No. WhatsApp' } as const;
 
-export function ProfilePage({ onDone, onCancel, names, existing, scanning = false }: {
+export function ProfilePage({ onDone, onCancel, names, existing, scanning = false, faceEnabled, busyRegister = false }: {
   onDone: (p: Profile) => void; onCancel: () => void; names: string[];
+  faceEnabled: boolean; busyRegister?: boolean; // tanpa wajah: tidak ada langkah persetujuan & scan
   existing: { nama: string; angkatan: string | null }[];
   scanning?: boolean; // kamera scan wajah (langkah terakhir) sedang terbuka
 }) {
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
+  const labels = faceEnabled ? STEP_LABELS : STEP_LABELS.slice(0, S.secret + 1);
+  const last = faceEnabled ? S.consent : S.secret; // langkah form terakhir
   const [nama, setNama] = useState('');
   const [alias, setAlias] = useState('');
   const [nbp, setNbp] = useState('');
@@ -416,7 +422,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
   const phAnim = useTypingPlaceholder(names, nama === '');
 
   const jab = jabPreset === '__custom' ? jabCustom : jabPreset;
-  const shown = scanning ? STEP_LABELS.length - 1 : step;
+  const shown = scanning ? labels.length - 1 : step;
   const vals: Partial<Record<number, string>> = { [S.nama]: nama, [S.alias]: alias, [S.nbp]: nbp, [S.wa]: wa };
   const angkatan = angkatanFromNbp(nbp);
 
@@ -428,7 +434,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
 
   const go = async (d: number) => {
     const ns = step + d;
-    if (ns < 0 || ns > LAST) return;
+    if (ns < 0 || ns > last) return;
     if (d > 0) {
       if (step === S.jabatan && !jab) {
         setErr('Pilih jabatan atau isi manual.');
@@ -469,7 +475,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
   };
 
   const submit = () => {
-    if (!consent) {
+    if (faceEnabled && !consent) {
       setErr('Persetujuan wajib — wajah dipakai untuk login & absensi piket.');
       return;
     }
@@ -498,7 +504,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
       transition={{ duration: 0.25 }}
     >
       <div className="pbar">
-        {STEP_LABELS.map((_, i) => (
+        {labels.map((_, i) => (
           <motion.i
             key={i}
             initial={false}
@@ -508,7 +514,7 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
           />
         ))}
       </div>
-      <p className="pstep-label">Langkah {shown + 1} dari {STEP_LABELS.length} — {STEP_LABELS[shown]}</p>
+      <p className="pstep-label">Langkah {shown + 1} dari {labels.length} — {labels[shown]}</p>
       <AnimatePresence mode="wait" custom={dir}>
         <motion.div
           key={step}
@@ -649,9 +655,9 @@ export function ProfilePage({ onDone, onCancel, names, existing, scanning = fals
         {step > 0
           ? <Button variant="secondary" onClick={() => void go(-1)}>Sebelumnya</Button>
           : <Button variant="secondary" onClick={onCancel}>Tutup</Button>}
-        {step < LAST
+        {step < last
           ? <Button variant="primary" busy={busy} disabled={dupe} onClick={() => void go(1)}>Lanjut</Button>
-          : <Button variant="primary" disabled={dupe} onClick={submit}>Lanjut scan wajah</Button>}
+          : <Button variant="primary" busy={busyRegister} disabled={dupe} onClick={submit}>{faceEnabled ? 'Lanjut scan wajah' : 'Daftar'}</Button>}
       </div>
     </motion.div>
   );

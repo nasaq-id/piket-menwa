@@ -11,6 +11,7 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 ## ✨ Fitur
 
 ### 🔐 Auth & Identitas
+- **Mode tanpa wajah (default)** — verifikasi wajah dimatikan kecuali `FACE_ENABLED=true` di `.env` server. Mati = tidak butuh CompreFace (±2 GB RAM): login NBP/WA + PIN, daftar tanpa langkah wajah, absen = **scan QR mako statis + geofence**. QR dibuat/di-reset superadmin di tab **Pengaturan** (isinya URL `/?absen=<token>`; juga bisa ketik kode). Kode & data wajah tetap ada — nyalakan lagi dengan `FACE_ENABLED=true` + jalankan CompreFace (`deploy/compreface`).
 - **Login 2 jalur (pilih salah satu)** — (a) manual: NBP / No. WhatsApp / alias + PIN atau password, atau (b) **wajah saja**: scan → server mengenali pemiliknya di antara semua anggota (ditolak kalau ada >1 anggota yang sama-sama mirip). Absen tetap wajib scan wajah.
 - **Registrasi mandiri** — wizard: Nama → Alias → NBP (angkatan otomatis dari 2 digit pertama) → Jabatan → No. WA → persetujuan data wajah (UU PDP) → PIN/password, lalu scan wajah di akhir. Tolak duplikat wajah, NBP, WA, alias (dicek langsung saat mengetik).
 - **Scan wajah challenge-response + anti-spoofing** — tatap depan, lalu server memberi arah menoleh **acak** (kiri/kanan, berlaku 30 detik, sekali pakai), ditambah skor liveness pasif **MiniFASNet**. Foto/layar tidak bisa menoleh sesuai perintah; rekaman video tidak bisa menebak arahnya.

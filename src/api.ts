@@ -212,12 +212,13 @@ export interface AppState {
   jam: Record<DayKey, string>; // "09.00–15.00"
   swaps: SwapRow[];
   templateLen: number; // jumlah tugas master (dipakai buat hitung X/Y bukti)
+  faceEnabled: boolean; // false = login PIN + absen QR mako (verifikasi wajah dimatikan server)
 }
 
 export async function loadState(): Promise<AppState> {
   const s = await get<{
     members: Member[]; roster: RosterRow[];
-    swaps: SwapRow[]; template: TaskRow[];
+    swaps: SwapRow[]; template: TaskRow[]; config?: { faceEnabled?: boolean };
   }>('/api/state');
   if (s) {
     const schedule = { ...DEFAULT_SCHEDULE } as Record<DayKey, string[]>;
@@ -228,7 +229,7 @@ export async function loadState(): Promise<AppState> {
       jam[r.day] = `${r.jamMulai}–${r.jamSelesai}`;
     }
     save('piket-members', s.members);
-    return { fromApi: true, members: s.members, schedule, jam, swaps: s.swaps as SwapRow[], templateLen: s.template.length };
+    return { fromApi: true, members: s.members, schedule, jam, swaps: s.swaps as SwapRow[], templateLen: s.template.length, faceEnabled: s.config?.faceEnabled === true };
   }
   // offline fallback (anggota = cache terakhir, bisa kosong)
   const schedule = load('piket-schedule', DEFAULT_SCHEDULE);
@@ -237,7 +238,7 @@ export async function loadState(): Promise<AppState> {
     fromApi: false,
     members: load<Member[]>('piket-members', []),
     schedule, jam: Object.fromEntries(Object.keys(schedule).map((d) => [d, '09.00–15.00'])) as Record<DayKey, string>,
-    swaps, templateLen: DEFAULT_TASKS.length,
+    swaps, templateLen: DEFAULT_TASKS.length, faceEnabled: false,
   };
 }
 
@@ -429,6 +430,23 @@ export async function markAttendance(
   return r.ok ? { ok: true, ...r.data } : r;
 }
 
+// Absen tanpa wajah: bukti hadir = kode dari QR yang ditempel di mako.
+export async function markAttendanceQr(
+  tanggal: string, memberId: string, qr: string, geo: GeoFix | null,
+): Promise<{ ok: true; jam?: string; status?: AttRow['status'] } | { ok: false; error: string }> {
+  const r = await postResult<{ jam?: string; status?: AttRow['status'] }>(
+    '/api/attendance', { tanggal, memberId, attest: getAttest(memberId, tanggal), qr, geo }, 'gagal absen',
+  );
+  return r.ok ? { ok: true, ...r.data } : r;
+}
+
+// Superadmin: token QR mako (dicetak jadi gambar QR di client) + buat ulang.
+export const loadQrToken = async () => (await superGet<{ token: string }>('/api/settings/qr'))?.token ?? null;
+export async function rotateQrToken(): Promise<string | null> {
+  const r = await superPut('/api/settings/qr/rotate', {});
+  return r.ok ? loadQrToken() : null;
+}
+
 // Heartbeat presence (fire-and-forget, tanpa PIN).
 export function ping(memberId: string) {
   fetch('/api/presence', {
@@ -452,7 +470,7 @@ export interface RegisterInput {
   wa: string; authType: AuthType; secret: string;
 }
 export async function registerMember(
-  p: RegisterInput, challengeId: string, frames: string[],
+  p: RegisterInput, challengeId?: string, frames?: string[], // kosong saat verifikasi wajah dimatikan
 ): Promise<{ ok: boolean; memberId?: string; error?: string }> {
   try {
     const r = await fetch('/api/register', {

@@ -56,6 +56,10 @@ app.use('/uploads/profil', express.static(path.resolve(UPLOAD_DIR, 'profil')));
 
 // ---- secret policy: production WAJIB env, dev boleh default (berisik, tanpa nilai) ----
 const IS_PROD = process.env.NODE_ENV === 'production';
+// Verifikasi wajah (CompreFace + liveness) DIMATIKAN secara default — butuh RAM
+// ±2 GB. Nyalakan dengan FACE_ENABLED=true (+ jalankan CompreFace) kalau server cukup.
+// Mati → login & daftar cukup NBP/WA + PIN, absen = QR mako + geofence.
+const FACE_ENABLED = process.env.FACE_ENABLED === 'true';
 const needEnv = (name: string, devFallback: string): string => {
   const v = process.env[name];
   if (v) return v;
@@ -296,6 +300,7 @@ app.get('/api/state', (_req, res) => {
     roster: db.select().from(roster).all(),
     template: db.select().from(tasks).where(eq(tasks.tanggal, 'template')).all(),
     swaps: db.select().from(swaps).all().sort((a, b) => b.createdAt - a.createdAt),
+    config: { faceEnabled: FACE_ENABLED },
   });
 });
 
@@ -694,6 +699,12 @@ const pinError = (pin: string, angkatan: string, minLen = 6): string | null => {
   return null;
 };
 
+// Semua endpoint wajah menolak saat FACE_ENABLED mati (kode & data wajah tetap ada).
+const faceOnly: express.RequestHandler = (_req, res, next) => {
+  if (!FACE_ENABLED) return void res.status(404).json({ error: 'Verifikasi wajah sedang dinonaktifkan.' });
+  next();
+};
+
 // ---- Verifikasi wajah (CompreFace + MiniFASNet, dinilai di SERVER) ----
 // Alur: HP minta challenge (arah acak) → kirim frame depan + frame menoleh →
 // server menilai liveness, arah, dan kecocokan. Frame hanya diproses di memori.
@@ -735,7 +746,7 @@ const faceOwner = (frame: Parameters<typeof bestMatch>[0], exceptId?: string) =>
 
 // Frame scan dikirim satu per satu (frame depan, lalu frame menoleh) supaya HP
 // bisa berhenti begitu sudah cukup menoleh — tidak menunggu durasi tetap.
-app.post('/api/face/frame', rateLimit(240, 60_000), async (req, res) => {
+app.post('/api/face/frame', faceOnly, rateLimit(240, 60_000), async (req, res) => {
   const { challengeId, kind, frame } = (req.body ?? {}) as { challengeId?: unknown; kind?: unknown; frame?: unknown };
   const buf = parseFrame(frame);
   if (!buf) return void res.status(400).json({ error: 'Data kamera tidak lengkap — coba lagi.' });
@@ -747,7 +758,7 @@ app.post('/api/face/frame', rateLimit(240, 60_000), async (req, res) => {
   }
 });
 
-app.post('/api/face/challenge', rateLimit(30, 60_000), (req, res) => {
+app.post('/api/face/challenge', faceOnly, rateLimit(30, 60_000), (req, res) => {
   const { purpose, preToken, memberId, attest } = (req.body ?? {}) as {
     purpose: Purpose; preToken?: string; memberId?: string; attest?: string;
   };
@@ -804,20 +815,22 @@ app.post('/api/register', rateLimit(10, 60_000), async (req, res) => {
   if ('error' in ident) return void res.status(ident.status).json({ error: ident.error });
   const secErr = secretError(authType, secret, ident.angkatan ?? '');
   if (secErr) return void res.status(400).json({ error: secErr });
-  // Wajah WAJIB: dipakai verifikasi login + absensi piket.
-  let face;
-  try {
-    face = await verifyFace(req.body ?? {}, 'register', null, req.header('user-agent'));
-  } catch (e) {
-    return faceError(res, e);
-  }
-  if (!face.ok) return void res.status(face.status).json({ error: face.error });
-  const { front, turn, scores } = face.out;
-  const owner = faceOwner(front);
-  if (owner && owner.sim >= FACE_CFG.matchMin) {
-    logCheck({ purpose: 'register', memberId: null, ok: false, reason: 'duplicate', scores, similarity: owner.sim });
-    const who = db.select({ nama: members.nama }).from(members).where(eq(members.id, owner.memberId)).all()[0];
-    return void res.status(409).json({ error: `Wajah ini sudah terdaftar${who ? ` sebagai ${who.nama}` : ''} — silakan login.` });
+  // Wajah WAJIB kalau FACE_ENABLED: dipakai verifikasi login + absensi piket.
+  let face: Awaited<ReturnType<typeof verifyFace>> | null = null;
+  let owner: ReturnType<typeof faceOwner> = null;
+  if (FACE_ENABLED) {
+    try {
+      face = await verifyFace(req.body ?? {}, 'register', null, req.header('user-agent'));
+    } catch (e) {
+      return faceError(res, e);
+    }
+    if (!face.ok) return void res.status(face.status).json({ error: face.error });
+    owner = faceOwner(face.out.front);
+    if (owner && owner.sim >= FACE_CFG.matchMin) {
+      logCheck({ purpose: 'register', memberId: null, ok: false, reason: 'duplicate', scores: face.out.scores, similarity: owner.sim });
+      const who = db.select({ nama: members.nama }).from(members).where(eq(members.id, owner.memberId)).all()[0];
+      return void res.status(409).json({ error: `Wajah ini sudah terdaftar${who ? ` sebagai ${who.nama}` : ''} — silakan login.` });
+    }
   }
   let id = slugify(clean);
   for (let n = 2; db.select().from(members).where(eq(members.id, id)).all()[0]; n++) id = `${slugify(clean)}-${n}`;
@@ -829,9 +842,11 @@ app.post('/api/register', rateLimit(10, 60_000), async (req, res) => {
     id, nama: clean, warna: PALETTE[count % PALETTE.length], divisi: 'acara',
     foto: null, jabatan: jab, pinHash: hashPin(secret), authType, ...ident,
   }).run();
-  saveTemplate(id, [front, turn]);
-  logCheck({ purpose: 'register', memberId: id, ok: true, scores, similarity: owner?.sim ?? null });
-  // Wajah baru saja dipindai saat daftar → langsung dapat atestasi hari ini.
+  if (face?.ok) {
+    saveTemplate(id, [face.out.front, face.out.turn]);
+    logCheck({ purpose: 'register', memberId: id, ok: true, scores: face.out.scores, similarity: owner?.sim ?? null });
+  }
+  // Baru saja daftar (PIN/password baru dibuat) → langsung dapat atestasi hari ini.
   const tanggal = todayLocal();
   res.json({ ok: true, memberId: id, nama: clean, attest: issueAttest(id, tanggal), tanggal });
 });
@@ -888,13 +903,13 @@ app.post('/api/login/credential', rateLimit(10, 60_000), (req, res) => {
   if (loginBlocked(res, m.id)) return;
   // Belum punya template wajah (di-reset admin / ganti model) → wajib daftar
   // ulang wajah dulu (tanpa template tidak bisa absen).
-  if (!loadTemplate(m.id)) return void res.json({ ok: true, memberId: m.id, nama: m.nama, needEnroll: true, preToken: issuePrelogin(m.id) });
+  if (FACE_ENABLED && !loadTemplate(m.id)) return void res.json({ ok: true, memberId: m.id, nama: m.nama, needEnroll: true, preToken: issuePrelogin(m.id) });
   const tanggal = todayLocal();
   res.json({ ok: true, memberId: m.id, nama: m.nama, needEnroll: false, attest: issueAttest(m.id, tanggal), tanggal });
 });
 
 // Daftar ulang wajah setelah login manual (akun belum punya template).
-app.post('/api/login/enroll-face', rateLimit(20, 60_000), async (req, res) => {
+app.post('/api/login/enroll-face', faceOnly, rateLimit(20, 60_000), async (req, res) => {
   const { preToken } = (req.body ?? {}) as { preToken: string };
   const memberId = checkPrelogin(preToken);
   if (!memberId) return void res.status(401).json({ error: 'Sesi login kedaluwarsa — ulangi dari awal.' });
@@ -922,7 +937,7 @@ app.post('/api/login/enroll-face', rateLimit(20, 60_000), async (req, res) => {
 
 // Login pakai wajah saja: cari pemilik wajah di SEMUA anggota (1:N).
 // Kalau ada >1 anggota yang sama-sama lolos batas → tolak, jangan menebak.
-app.post('/api/login/identify', rateLimit(20, 60_000), async (req, res) => {
+app.post('/api/login/identify', faceOnly, rateLimit(20, 60_000), async (req, res) => {
   let face;
   try {
     face = await verifyFace(req.body ?? {}, 'identify', null, req.header('user-agent'));
@@ -1154,9 +1169,26 @@ const hasAttended = (tanggal: string, memberId: string) =>
   db.select({ id: attendance.id }).from(attendance)
     .where(and(eq(attendance.tanggal, tanggal), eq(attendance.memberId, memberId))).all().length > 0;
 
+// QR mako STATIS (dicetak/ditempel di mako) — pengganti verifikasi wajah saat
+// FACE_ENABLED mati. Isinya token acak di setting `absen_qr`; superadmin bisa
+// membuat ulang kapan saja kalau QR bocor.
+const newQrToken = () => randomBytes(9).toString('base64url');
+const qrToken = () => {
+  let t = getSetting('absen_qr');
+  if (!t) { t = newQrToken(); setSetting('absen_qr', t); }
+  return t;
+};
+const qrOk = (given: unknown): boolean => {
+  const good = getSetting('absen_qr');
+  if (!good || typeof given !== 'string') return false;
+  const a = Buffer.from(given.trim());
+  const b = Buffer.from(good);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
 app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
-  const { tanggal, memberId, attest, geo: geoIn } = (req.body ?? {}) as {
-    tanggal: string; memberId: string; attest?: string; geo?: unknown;
+  const { tanggal, memberId, attest, geo: geoIn, qr } = (req.body ?? {}) as {
+    tanggal: string; memberId: string; attest?: string; geo?: unknown; qr?: unknown;
   };
   if (tanggal !== todayLocal()) return void res.status(400).json({ error: 'absen hanya untuk hari ini' });
   const member = db.select().from(members).where(eq(members.id, memberId)).all()[0];
@@ -1169,19 +1201,25 @@ app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
   if (!win.ok) return void res.status(400).json({ error: win.error });
   const geo = absenGeo(geoIn);
   if (!geo.ok) return void res.status(400).json({ error: geo.error });
-  // Bukti hadir = verifikasi wajah BARU saat absen (bukan sisa login pagi).
-  let face;
-  try {
-    face = await verifyFace(req.body ?? {}, 'absen', memberId, req.header('user-agent'));
-  } catch (e) {
-    return faceError(res, e);
+  if (FACE_ENABLED) {
+    // Bukti hadir = verifikasi wajah BARU saat absen (bukan sisa login pagi).
+    let face;
+    try {
+      face = await verifyFace(req.body ?? {}, 'absen', memberId, req.header('user-agent'));
+    } catch (e) {
+      return faceError(res, e);
+    }
+    if (!face.ok) return void res.status(face.status).json({ error: face.error });
+    const tpl = loadTemplate(memberId);
+    const sim = tpl ? bestMatch(face.out.front, tpl) : 0;
+    const matched = sim >= FACE_CFG.matchMin;
+    logCheck({ purpose: 'absen', memberId, ok: matched, reason: matched ? null : 'no_match', scores: face.out.scores, similarity: sim });
+    if (!matched) return void res.status(401).json({ error: `Wajah tidak cocok dengan ${member.nama} — absen harus oleh orangnya langsung.` });
+  } else {
+    // Bukti hadir = scan QR yang ditempel di mako (+ geofence di atas).
+    if (!getSetting('absen_qr')) return void res.status(400).json({ error: 'QR mako belum dibuat superadmin — absen belum bisa dipakai.' });
+    if (!qrOk(qr)) return void res.status(400).json({ error: 'QR tidak cocok — scan QR yang ditempel di mako.' });
   }
-  if (!face.ok) return void res.status(face.status).json({ error: face.error });
-  const tpl = loadTemplate(memberId);
-  const sim = tpl ? bestMatch(face.out.front, tpl) : 0;
-  const matched = sim >= FACE_CFG.matchMin;
-  logCheck({ purpose: 'absen', memberId, ok: matched, reason: matched ? null : 'no_match', scores: face.out.scores, similarity: sim });
-  if (!matched) return void res.status(401).json({ error: `Wajah tidak cocok dengan ${member.nama} — absen harus oleh orangnya langsung.` });
   const jam = fmtJam(new Date());
   db.insert(attendance).values({
     tanggal, memberId, jam, createdAt: Date.now(), status: win.status,
@@ -1465,7 +1503,8 @@ app.get('/api/nilai/detail', requireSuper, (req, res) => {
 // ---- settings ketua/wakil (superadmin) ----
 app.get('/api/settings', (_req, res) => {
   const out: Record<string, string> = {};
-  for (const s of db.select().from(settings).all()) out[s.key] = s.value;
+  // absen_qr = rahasia QR mako: jangan pernah ikut keluar di endpoint publik ini.
+  for (const s of db.select().from(settings).all()) if (s.key !== 'absen_qr') out[s.key] = s.value;
   res.json(out);
 });
 
@@ -1489,6 +1528,14 @@ app.put('/api/settings/mako', requireSuper, (req, res) => {
   setSetting('mako_lng', String(ln));
   setSetting('mako_radius', String(r));
   res.json({ ok: true });
+});
+
+// QR absen: superadmin melihat/membuat ulang token (dicetak jadi QR di client).
+app.get('/api/settings/qr', requireSuper, (_req, res) => res.json({ token: qrToken() }));
+app.put('/api/settings/qr/rotate', requireSuper, (_req, res) => {
+  const token = newQrToken();
+  setSetting('absen_qr', token);
+  res.json({ ok: true, token });
 });
 
 app.put('/api/settings', requireSuper, (req, res) => {

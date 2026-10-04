@@ -4,7 +4,7 @@
 // (2.7× untuk V2, 4.0× untuk V1SE) → resize 80×80 → BGR float 0..255 NCHW.
 // Output 3 kelas, index 1 = wajah asli; 2 model dirata-rata (cara Silent-Face).
 import path from 'node:path';
-import * as ort from 'onnxruntime-node';
+import type * as OrtTypes from 'onnxruntime-node';
 import sharp, { type Sharp } from 'sharp';
 import type { DetectedFace } from './compreface.ts';
 
@@ -14,10 +14,13 @@ const MODELS = [
 ] as const;
 const SIZE = 80;
 
-let sessions: Promise<ort.InferenceSession[]> | null = null;
+// onnxruntime-node baru dimuat saat verifikasi wajah pertama — kalau fitur wajah
+// dimatikan (FACE_ENABLED=false), library native-nya tidak ikut makan RAM.
+const loadOrt = () => import('onnxruntime-node');
+let sessions: Promise<OrtTypes.InferenceSession[]> | null = null;
 const loadSessions = () => {
-  sessions ??= Promise.all(MODELS.map((m) =>
-    ort.InferenceSession.create(path.join(import.meta.dirname, '..', 'models', m.file))));
+  sessions ??= loadOrt().then((ort) => Promise.all(MODELS.map((m) =>
+    ort.InferenceSession.create(path.join(import.meta.dirname, '..', 'models', m.file)))));
   return sessions;
 };
 
@@ -52,6 +55,7 @@ async function cropTensor(img: Sharp, w: number, h: number, face: DetectedFace, 
     t[plane + i] = raw[i * 3 + 1]; // G
     t[2 * plane + i] = raw[i * 3]; // R
   }
+  const ort = await loadOrt();
   return new ort.Tensor('float32', t, [1, 3, SIZE, SIZE]);
 }
 
