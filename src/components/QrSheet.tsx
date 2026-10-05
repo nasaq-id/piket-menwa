@@ -9,7 +9,7 @@ interface BarcodeDetectorLike { detect: (src: CanvasImageSource) => Promise<{ ra
 type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
 
 const SCAN_INTERVAL_MS = 250; // ±4 pembacaan/detik — cukup responsif, tidak membakar CPU
-const RETRY_COOLDOWN_MS = 3000; // jeda sebelum kode gagal yang sama dicoba lagi otomatis
+const AWAY_MS = 1500; // QR harus hilang dari kamera selama ini sebelum kode gagal yang sama boleh dikirim lagi
 const MAX_SCAN_W = 640; // frame diperkecil sebelum dibaca jsQR
 
 // Absen tanpa wajah: scan QR yang ditempel di mako (kamera dalam aplikasi),
@@ -24,9 +24,10 @@ export function QrSheet({ onSubmit, onClose }: {
   const [err, setErr] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const busyRef = useRef(false);
-  // Hasil gagal terakhir: kode yang sama diabaikan selama jeda supaya kamera yang
-  // masih mengarah ke QR yang sama tidak mengirim ulang & mengedipkan error tiap frame.
-  const failedRef = useRef<{ token: string; until: number } | null>(null);
+  // Kode yang baru gagal TIDAK dikirim ulang otomatis selama masih terlihat di kamera
+  // (hasilnya pasti sama & akan mengedipkan tombol/error). Setelah QR menghilang dari
+  // kamera ≥ AWAY_MS atau kode lain terbaca, baru boleh dicoba lagi. Tombol "Absen" tetap manual.
+  const failedRef = useRef<{ token: string; lastSeen: number } | null>(null);
   const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
 
   const kirim = async (raw: string) => {
@@ -39,7 +40,7 @@ export function QrSheet({ onSubmit, onClose }: {
     busyRef.current = false;
     setBusy(false);
     if (!r.ok) {
-      failedRef.current = { token, until: Date.now() + RETRY_COOLDOWN_MS };
+      failedRef.current = { token, lastSeen: Date.now() };
       setErr(r.error ?? 'Gagal absen.');
     }
   };
@@ -89,16 +90,17 @@ export function QrSheet({ onSubmit, onClose }: {
         }
 
         // Kode dikirim hanya setelah terbaca sama di 2 frame berturut-turut (buang salah baca),
-        // dan tidak pernah saat sedang memeriksa / selama jeda kode gagal yang sama.
+        // dan tidak pernah saat sedang memeriksa / selama kode gagal yang sama masih di depan kamera.
         let last: string | null = null;
         const tick = async () => {
           if (stop) return;
           try {
             const v = busyRef.current ? null : await read();
+            const f = failedRef.current;
+            if (f && v && extractQrToken(v) === f.token) f.lastSeen = Date.now(); // masih menghadap QR yang sama
+            else if (f && Date.now() - f.lastSeen > AWAY_MS) failedRef.current = null; // sudah menjauh / ganti kode
             if (v && v === last) {
-              const f = failedRef.current;
-              const blocked = f && f.token === extractQrToken(v) && Date.now() < f.until;
-              if (!blocked) { last = null; await kirim(v); }
+              if (!failedRef.current || extractQrToken(v) !== failedRef.current.token) { last = null; await kirim(v); }
             } else {
               last = v;
             }
