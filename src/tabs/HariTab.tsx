@@ -93,7 +93,7 @@ export function HariTab({ store }: { store: AppStore }) {
             {
               id: 'absen',
               label: 'Absen',
-              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? ' · terlambat' : ''}` : faceEnabled ? 'scan wajah' : 'scan QR',
+              sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? '\nterlambat' : ''}` : faceEnabled ? 'scan wajah' : 'scan QR',
               done: unlocked,
             },
             { id: 'bukti', label: 'Bukti', sub: `${ev.length}/${checks.length}`, done: buktiLengkap },

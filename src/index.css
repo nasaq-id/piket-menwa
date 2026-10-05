@@ -483,20 +483,21 @@ button:active { transform:scale(.97); }
 
 /* ---- Stepper piket fase 2: Absen → Bukti → Lapsit ---- */
 .stepper { display:flex; align-items:stretch; gap:0; margin-top:var(--space-3); }
-.stepwrap { flex:1; display:flex; align-items:stretch; min-width:0; }
-.step { position:relative; flex:1; display:flex; align-items:center; gap:var(--space-2); min-height:44px; background:transparent; border:1px solid transparent; border-radius:var(--radius); color:var(--dim); padding:var(--space-2); cursor:pointer; text-align:left; font-family:inherit; }
+.stepwrap { flex:1 1 auto; display:flex; align-items:stretch; min-width:0; }
+.step { position:relative; flex:1; display:flex; align-items:center; gap:var(--space-2); min-height:44px; background:transparent; border:1px solid transparent; border-radius:var(--radius); color:var(--dim); padding:var(--space-2); cursor:pointer; text-align:left; font-family:inherit; min-width:0; }
 .stepbg { position:absolute; inset:0; border:1px solid var(--accent); border-radius:var(--radius); background:rgba(232,240,236,.06); }
 .stepnum { position:relative; width:24px; height:24px; flex:none; border-radius:99px; border:1.5px solid var(--line); display:grid; place-items:center; font-size:var(--fs-xs); }
 .stepnum b { font-size:var(--fs-xs); font-weight:700; }
 .step.done .stepnum { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
 .step.active { color:var(--ink); }
 .step.active .stepnum { border-color:var(--accent); color:var(--ink); }
-.steptx { position:relative; display:flex; flex-direction:column; line-height:1.25; min-width:0; }
+.steptx { position:relative; display:flex; flex-direction:column; line-height:1.25; min-width:0; flex:1 1 auto; }
 .steptx b { font-size:var(--fs-xs); }
-.steptx span { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.steptx span { font-size:12px; color:var(--dim); white-space:pre-line; overflow-wrap:break-word; max-width:100%; } /* sub boleh 2 baris (\n), tidak pernah meluber ke langkah sebelah */
 .step.done .steptx span, .step.active .steptx span { color:var(--dim); }
 .stepline { flex:none; align-self:center; width:10px; height:1.5px; background:var(--line); margin:0 2px; }
 .stepline.on { background:var(--accent); }
+@media (max-width:360px) { .step { padding:var(--space-1); gap:4px; } .stepnum { width:20px; height:20px; } .stepline { width:6px; margin:0; } .steptx span { font-size:11px; } } /* HP sempit: tetap muat tanpa memotong kata */
 .buktiProg { margin:0 12px var(--space-2); } /* sejajar dgn teks petunjuk & daftar tugas di card */
 .tac .stepbg { background:rgba(74,222,128,.08); }
 .tac .step { border-radius:2px; }
