@@ -359,24 +359,26 @@ export async function loadFaceSummary(): Promise<FaceSummary[]> {
   return (await getAuthed<FaceSummary[]>('/api/faces/summary')) ?? [];
 }
 
-// Token atestasi wajah/PIN hari ini (bukti identitas ke server).
-// Disimpan per member+tanggal; logout menghapus semuanya.
+// Token atestasi login hari ini (bukti identitas ke server).
+// Disimpan per member+tanggal di localStorage — sama umurnya dengan sesi `piket-me`
+// (1 hari), supaya tetap ada saat aplikasi dibuka di tab/jendela baru (mis. dari
+// link QR scanner luar). Logout menghapus semuanya.
 const attestKey = (memberId: string, tanggal: string) => `piket-attest:${tanggal}:${memberId}`;
 export const saveAttest = (memberId: string, tanggal: string, token: string) => {
-  try { sessionStorage.setItem(attestKey(memberId, tanggal), token); } catch { /* abaikan */ }
+  try { localStorage.setItem(attestKey(memberId, tanggal), token); } catch { /* abaikan */ }
 };
 export const getAttest = (memberId: string, tanggal: string): string | undefined => {
-  try { return sessionStorage.getItem(attestKey(memberId, tanggal)) ?? undefined; }
+  try { return localStorage.getItem(attestKey(memberId, tanggal)) ?? undefined; }
   catch { return undefined; }
 };
 export const clearAttest = () => {
   try {
     const rm: string[] = [];
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const k = sessionStorage.key(i);
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
       if (k?.startsWith('piket-attest:')) rm.push(k);
     }
-    rm.forEach((k) => sessionStorage.removeItem(k));
+    rm.forEach((k) => localStorage.removeItem(k));
   } catch { /* abaikan */ }
 };
 

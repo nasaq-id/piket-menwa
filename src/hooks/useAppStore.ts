@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useConfirm } from './useConfirm';
 import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
-  dropPush, ensurePush, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
+  dropPush, ensurePush, getAttest, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
   loadNilaiToday, requestChallenge,
   loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginEnrollFace, loginIdentify, markAttendance, markAttendanceQr, ping,
   registerMember, saveRosterRemote, saveWeekRosterRemote, setKontak, setLoginSecret, setProfilePhoto, submitLapsit,
@@ -56,10 +56,13 @@ export function useAppStore() {
   const [pendingLogin, setPendingLogin] = useState<{ preToken: string; memberId: string; nama: string } | null>(null);
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [me, setMe] = useState(() => {
-    // Sesi hanya berlaku 1 hari → tiap hari wajib verifikasi wajah ulang.
+    // Sesi hanya berlaku 1 hari → tiap hari wajib login ulang. Tanpa token atestasi
+    // hari ini (mis. sesi lama sebelum token pindah ke localStorage) dianggap belum login,
+    // supaya tidak "tampak login" tapi ditolak server dengan "Login dulu hari ini".
     try {
-      if (localStorage.getItem('piket-me-date') !== dateStr(0)) return '';
-      return load('piket-me', '');
+      if (localStorage.getItem('piket-me-date') !== dateStr(0)) { clearAttest(); return ''; }
+      const id = load('piket-me', '');
+      return id && getAttest(id, dateStr(0)) ? id : '';
     } catch {
       return '';
     }
@@ -590,6 +593,12 @@ export function useAppStore() {
     const r = await markAttendanceQr(dateStr(0), me, token, absenGeoRef.current);
     if (!r.ok) {
       if (/QR/.test(r.error)) clearSavedQr();
+      if (/^Login dulu/.test(r.error)) {
+        // Server tidak mengenali sesi (mis. token hilang / server dipulihkan) → login ulang, bukan loop error.
+        setQrOpen(false);
+        logout();
+        setToast({ msg: 'Sesi login habis — masuk lagi, lalu tekan Absen.', kind: 'info' });
+      }
       return r;
     }
     saveQr(token);
