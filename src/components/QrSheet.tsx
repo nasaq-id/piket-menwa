@@ -8,8 +8,7 @@ import { ShakeErr } from './Motion';
 interface BarcodeDetectorLike { detect: (src: CanvasImageSource) => Promise<{ rawValue: string }[]> }
 type BarcodeDetectorCtor = new (opts: { formats: string[] }) => BarcodeDetectorLike;
 
-const SCAN_INTERVAL_MS = 250; // ±4 pembacaan/detik — cukup responsif, tidak membakar CPU
-const AWAY_MS = 1500; // QR harus hilang dari kamera selama ini sebelum kode gagal yang sama boleh dikirim lagi
+const SCAN_INTERVAL_MS = 100; // 10 pembacaan/detik — kisaran umum pustaka pemindai (nimiq/qr-scanner default 25/dtk, html5-qrcode contoh 10 fps)
 const MAX_SCAN_W = 640; // frame diperkecil sebelum dibaca jsQR
 
 // Absen tanpa wajah: scan QR yang ditempel di mako (kamera dalam aplikasi),
@@ -19,15 +18,19 @@ export function QrSheet({ onSubmit, onClose }: {
   onClose: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Loop pemindai dibuat sekali; selalu panggil onSubmit terbaru, bukan salinan render pertama.
+  const onSubmitRef = useRef(onSubmit);
+  onSubmitRef.current = onSubmit;
   const [kode, setKode] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const busyRef = useRef(false);
-  // Kode yang baru gagal TIDAK dikirim ulang otomatis selama masih terlihat di kamera
-  // (hasilnya pasti sama & akan mengedipkan tombol/error). Setelah QR menghilang dari
-  // kamera ≥ AWAY_MS atau kode lain terbaca, baru boleh dicoba lagi. Tombol "Absen" tetap manual.
-  const failedRef = useRef<{ token: string; lastSeen: number } | null>(null);
+  // Pemindaian berhenti (frame dibekukan) begitu ada 1 hasil, sampai user menekan "Scan ulang".
+  // Hasil decode QR sudah divalidasi koreksi error Reed-Solomon, jadi tidak perlu konfirmasi
+  // berulang; tidak ada coba-ulang otomatis (hasilnya pasti sama & bikin tombol/error berkedip).
+  const pausedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
   const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
 
   const kirim = async (raw: string) => {
@@ -36,13 +39,24 @@ export function QrSheet({ onSubmit, onClose }: {
     busyRef.current = true;
     setBusy(true);
     setErr(null);
-    const r = await onSubmit(token);
+    const r = await onSubmitRef.current(token);
     busyRef.current = false;
     setBusy(false);
-    if (!r.ok) {
-      failedRef.current = { token, lastSeen: Date.now() };
-      setErr(r.error ?? 'Gagal absen.');
-    }
+    if (!r.ok) setErr(r.error ?? 'Gagal absen.');
+  };
+
+  // Hasil dari kamera: bekukan pemindai dulu, baru kirim.
+  const dariKamera = async (raw: string) => {
+    pausedRef.current = true;
+    setPaused(true);
+    videoRef.current?.pause();
+    await kirim(raw);
+  };
+  const scanUlang = () => {
+    setErr(null);
+    pausedRef.current = false;
+    setPaused(false);
+    void videoRef.current?.play();
   };
 
   useEffect(() => {
@@ -89,22 +103,14 @@ export function QrSheet({ onSubmit, onClose }: {
           };
         }
 
-        // Kode dikirim hanya setelah terbaca sama di 2 frame berturut-turut (buang salah baca),
-        // dan tidak pernah saat sedang memeriksa / selama kode gagal yang sama masih di depan kamera.
-        let last: string | null = null;
         const tick = async () => {
           if (stop) return;
-          try {
-            const v = busyRef.current ? null : await read();
-            const f = failedRef.current;
-            if (f && v && extractQrToken(v) === f.token) f.lastSeen = Date.now(); // masih menghadap QR yang sama
-            else if (f && Date.now() - f.lastSeen > AWAY_MS) failedRef.current = null; // sudah menjauh / ganti kode
-            if (v && v === last) {
-              if (!failedRef.current || extractQrToken(v) !== failedRef.current.token) { last = null; await kirim(v); }
-            } else {
-              last = v;
-            }
-          } catch { /* frame gagal dibaca → coba lagi */ }
+          if (!pausedRef.current && !busyRef.current) {
+            try {
+              const v = await read();
+              if (v && !pausedRef.current) await dariKamera(v);
+            } catch { /* frame gagal dibaca → frame berikutnya */ }
+          }
           timer = window.setTimeout(() => void tick(), SCAN_INTERVAL_MS);
         };
         void tick();
@@ -143,6 +149,8 @@ export function QrSheet({ onSubmit, onClose }: {
         <span className="hint">
           {busy
             ? 'Memeriksa…'
+            : paused
+            ? 'Pemindaian dihentikan.'
             : scanning
             ? 'Arahkan kamera ke QR yang ditempel di mako.'
             : 'Scan QR mako dengan kamera HP (otomatis terbuka di sini), atau ketik kodenya di bawah.'}
@@ -154,7 +162,9 @@ export function QrSheet({ onSubmit, onClose }: {
         />
         <ShakeErr msg={err} />
         <div className="row">
-          <Button variant="primary" busy={busy} disabled={!kode.trim()} onClick={() => void kirim(kode)}>Absen</Button>
+          {scanning && paused && !busy
+            ? <Button variant="primary" onClick={scanUlang}>Scan ulang</Button>
+            : <Button variant="primary" busy={busy} disabled={!kode.trim()} onClick={() => void kirim(kode)}>Absen</Button>}
           <Button variant="secondary" onClick={onClose}>Batal</Button>
         </div>
       </motion.div>
