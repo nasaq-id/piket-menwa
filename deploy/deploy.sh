@@ -3,14 +3,16 @@
 #   API   : systemd piket-menwa (user piket, 127.0.0.1:3110, TZ Asia/Jakarta)
 #   Web   : nginx VPS 127.0.0.1:8080 (dist/ + proxy /api /uploads) — deploy/nginx/piket-local.conf
 #   Publik: nginx VPS tunnel (SSL + rate limit) -> tunnel SSH piket-tunnel -> 127.0.0.1:8080
-# Alamat & domain dibaca dari deploy/deploy.env (lokal, di-gitignore) — salin dari deploy.env.example.
+# Jalan otomatis di GitHub Actions (.github/workflows/deploy.yml) tiap push ke master; bisa juga manual dari laptop.
+# Alamat & domain: env APP_URL/SERVER_SSH/SERVER_PORT (secret CI) atau deploy/deploy.env (lokal, di-gitignore).
 # VPS cuma ±1 GB RAM tanpa swap: JANGAN pnpm install di sana (pernah membuatnya beku). node_modules dirakit
 # di laptop pakai Node yang sama dengan server (ABI better-sqlite3), dikirim hanya kalau pnpm-lock.yaml berubah.
 # Yang TIDAK PERNAH ditimpa/dihapus di server: data/ (DB + uploads), .env, server/.vapid.json
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ -f deploy/deploy.env ] || { echo "deploy/deploy.env belum ada — salin dari deploy/deploy.env.example lalu isi."; exit 1; }
-. deploy/deploy.env   # APP_URL, SERVER_SSH, SERVER_PORT
+if [ -f deploy/deploy.env ]; then . deploy/deploy.env; fi   # APP_URL, SERVER_SSH, SERVER_PORT
+: "${APP_URL:?set APP_URL atau isi deploy/deploy.env (salin dari deploy.env.example)}"
+: "${SERVER_SSH:?set SERVER_SSH}" "${SERVER_PORT:?set SERVER_PORT}"
 NODE_VER=v24.14.1     # samakan dengan /usr/local/bin/node di server
 DIR=/opt/piket-menwa
 RSH="ssh -p $SERVER_PORT -o BatchMode=yes"
@@ -24,7 +26,7 @@ rsync -a --delete -e "$RSH" \
   --exclude node_modules/ --exclude data/ --exclude uploads/ \
   --exclude .env --exclude 'server/.vapid.json' --exclude 'deploy/deploy.env' \
   --exclude 'deploy/compreface/.env' --exclude 'infra/compreface/.env' --exclude '*.db' --exclude '*.db-*' \
-  --exclude 'face-lab*' --exclude opencode.json --exclude .git/ --exclude docs/ --exclude '*.apk' --exclude '*.zip' \
+  --exclude 'face-lab*' --exclude opencode.json --exclude .git/ --exclude .github/ --exclude android/ --exclude docs/ --exclude '*.apk' --exclude '*.zip' \
   ./ "$SERVER_SSH:$DIR/"
 
 LOCAL_LOCK=$(sha256sum pnpm-lock.yaml | cut -d' ' -f1)

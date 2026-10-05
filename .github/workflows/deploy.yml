@@ -1,0 +1,38 @@
+# Build frontend + rakit node_modules produksi di runner, lalu kirim ke VPS lewat deploy/deploy.sh.
+# Secret repo: DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS, SERVER_SSH, SERVER_PORT, APP_URL (nilai asli tidak di repo).
+name: deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: kunci SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: deploy
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          SERVER_SSH: ${{ secrets.SERVER_SSH }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: bash deploy/deploy.sh
