@@ -1,16 +1,19 @@
+# /etc/systemd/system/piket-menwa.service di VPS (system unit, user piket). TZ wajib WIB: tanggal & jam absen pakai waktu lokal.
 [Unit]
-Description=Piket Menwa API (Express, 127.0.0.1:3110) — diakses publik lewat piket-tunnel + nginx VPS
-After=network-online.target docker.service
+Description=Piket Menwa API (Express, 127.0.0.1:3110)
+After=network-online.target
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=%h/apps/piket-menwa
+User=piket
+WorkingDirectory=/opt/piket-menwa
+Environment=TZ=Asia/Jakarta
 ExecStart=/usr/local/bin/node --env-file=.env server/index.ts
 Restart=always
 RestartSec=5
-# jaga mini PC: bot Claude & build edura butuh RAM juga
-MemoryHigh=500M
-MemoryMax=700M
+# VPS ±1 GB RAM tanpa swap
+MemoryHigh=350M
+MemoryMax=450M
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

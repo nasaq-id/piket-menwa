@@ -173,11 +173,15 @@ Salah PIN admin/superadmin **5×** → diblokir **1 jam** (tabel `pin_guard`). M
 
 ## 📦 Deploy
 
-**Produksi sekarang:** API + CompreFace ramping di server rumah, nginx + file statis di VPS,
-dihubungkan tunnel SSH. Domain & alamat VPS **tidak disimpan di repo** — isi `deploy/deploy.env` (salin dari `deploy.env.example`;
-file config nginx/systemd di `deploy/` memakai placeholder `piket.example.com` / `VPS_HOST`). Update cukup `deploy/deploy.sh` (build → kirim kode → restart → kirim frontend). Skrip ini
+**Produksi sekarang (sejak 5 Okt 2026):** frontend + API + DB di satu VPS app kecil (`/opt/piket-menwa`, ±1 GB RAM tanpa swap,
+di belakang NAT), nginx lokalnya di `127.0.0.1:8080`. VPS app membuka tunnel SSH ke VPS publik, yang memegang domain, SSL,
+pembatas percobaan PIN, dan unduhan APK. Mode tanpa wajah (CompreFace tidak jalan). Domain & alamat **tidak disimpan di repo** — isi
+`deploy/deploy.env` (salin dari `deploy.env.example`; file config di `deploy/` memakai placeholder `piket.example.com` / `PUBLIC_HOST`).
+Update cukup `deploy/deploy.sh` (build → kirim kode + frontend → restart). **Jangan `pnpm install` di VPS app** (RAM habis, server beku):
+skrip merakit `node_modules` di laptop dengan Node versi server dan mengirimnya hanya kalau `pnpm-lock.yaml` berubah. Skrip ini
 **tidak pernah** menimpa `data/` (DB + upload), `.env`, dan `server/.vapid.json` di server. Konfigurasi ada di `deploy/`:
-`compreface/` (cuma db + api + core, tanpa admin/UI — hemat ~430 MB RAM), `systemd/` (API + tunnel), `nginx/` (situs, unduhan APK, pembatas percobaan PIN).
+`systemd/` (API + tunnel), `nginx/` (`piket-local.conf` di VPS app; `piket-menwa.conf` + `piket-proxy.conf` di VPS publik),
+`compreface/` (hanya kalau `FACE_ENABLED=true`; butuh ±2 GB RAM, tidak muat di VPS app).
 Server membaca IP asli dari `X-Forwarded-For` hanya kalau datang dari loopback (`trust proxy`), jadi rate-limit dihitung per pengguna.
 
 **APK Android (TWA, sideload — bukan Play Store):** Bubblewrap, package `com.nohypelabs.piketmenwa`. Di repo cuma ada

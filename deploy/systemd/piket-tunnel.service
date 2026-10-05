@@ -1,14 +1,18 @@
+# /etc/systemd/system/piket-tunnel.service di VPS app (root). VPS app tidak punya port publik (NAT), jadi ia yang membuka
+# tunnel ke VPS publik: PUBLIC_HOST 127.0.0.1:18091 -> VPS app 127.0.0.1:8080 (nginx: frontend + API).
+# Kunci khusus /root/.ssh/id_piket_tunnel; di PUBLIC_HOST dibatasi:
+#   restrict,port-forwarding,permitlisten="127.0.0.1:18091" ssh-ed25519 ... piket-tunnel@helipod
+# CONTOH — ganti PUBLIC_HOST dengan alamat VPS publik (nilai asli tidak disimpan di repo).
 [Unit]
-Description=Tunnel KHUSUS piket-menwa: VPS 127.0.0.1:18090 -> mini PC 127.0.0.1:3110 (terpisah dari tunnel-vps.service)
-After=network-online.target
+Description=Tunnel piket-menwa: PUBLIC_HOST 127.0.0.1:18091 -> 127.0.0.1:8080
+After=network-online.target nginx.service
 Wants=network-online.target
 
 [Service]
-# CONTOH — ganti VPS_HOST dengan alamat VPS (nilai asli tidak disimpan di repo).
-ExecStart=/usr/bin/autossh -M 0 -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o BatchMode=yes -4 -R 127.0.0.1:18090:127.0.0.1:3110 root@VPS_HOST
+ExecStart=/usr/bin/autossh -M 0 -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o BatchMode=yes -o IdentitiesOnly=yes -i /root/.ssh/id_piket_tunnel -4 -R 127.0.0.1:18091:127.0.0.1:8080 root@PUBLIC_HOST
 Environment=AUTOSSH_GATETIME=0
 Restart=always
 RestartSec=10
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
