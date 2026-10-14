@@ -579,3 +579,10 @@ button:active { transform:scale(.97); }
 .wfoot .whint, .wfoot .wsecure { margin:0; }
 /* Halaman login tidak punya tab bawah → buang ruang 84px-nya, cukup safe-area. */
 .phone:has(> .welcome--login) { padding-bottom:env(safe-area-inset-bottom); }
+/* Superadmin: aksi per anggota + panel sandi sementara hasil reset */
+.supacts { display:flex; gap:6px; }
+.resetbox { gap:8px; margin-bottom:14px; border-color:var(--accent); }
+.resetbox .resetsecret { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:28px; letter-spacing:3px; color:var(--accent); user-select:all; }
+.resetbox span { font-size:12px; line-height:1.5; }
+.resetbox .row { display:flex; gap:8px; }
+.resetbox .row .btn { flex:1; }

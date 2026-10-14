@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  deleteMember, isOnline, loadAttendance, loadEvidence, loadFaceSummary,
+  deleteMember, isOnline, resetMemberSecret, loadAttendance, loadEvidence, loadFaceSummary,
   loadLapsit, loadState, superGet, unblockPin, verifySuper,
   type AppState, type AttRow, type EvidenceRow, type FaceSummary, type FeedItem,
   type LapsitRow, type Overview, type PinBlock, type SwapRow,
@@ -71,6 +71,8 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
   const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'ok' | 'info' } | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [blocks, setBlocks] = useState<PinBlock[]>([]);
+  // Sandi sementara hasil reset — hanya di memori, hilang saat panel ditutup.
+  const [resetInfo, setResetInfo] = useState<{ nama: string; jenis: string; secret: string } | null>(null);
   const { req: confirmReq, ask, resolve: resolveConfirm } = useConfirm();
 
   useEffect(() => {
@@ -100,6 +102,28 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
       return;
     }
     void reloadMembers();
+  };
+
+  const resetSandi = async (id: string, nama_: string) => {
+    const yes = await ask({
+      title: 'Reset sandi?',
+      message: `Sandi lama ${nama_} langsung tidak berlaku. Sandi sementara akan muncul sekali untuk kamu kirim ke ${nama_}.`,
+      confirmLabel: 'Reset sandi',
+    });
+    if (!yes) return;
+    const r = await resetMemberSecret(id);
+    if (!r.ok) return setToast({ msg: `Gagal reset sandi (${r.error}).`, kind: 'error' });
+    setResetInfo({ nama: nama_, jenis: r.authType === 'pin' ? 'PIN' : 'Password', secret: r.secret });
+    void loadBlocks();
+  };
+  const salinSandi = async () => {
+    if (!resetInfo) return;
+    try {
+      await navigator.clipboard.writeText(resetInfo.secret);
+      setToast({ msg: 'Sandi sementara disalin.', kind: 'ok' });
+    } catch {
+      setToast({ msg: 'Tidak bisa menyalin — catat manual.', kind: 'error' });
+    }
   };
 
   const loadBlocks = async () => setBlocks((await superGet<PinBlock[]>('/api/super/pin-blocks')) ?? []);
@@ -338,6 +362,20 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
 
           {tab === 'anggota' && (
             <>
+              {resetInfo && (
+                <div className="supcard resetbox" role="status">
+                  <span>{resetInfo.jenis} sementara untuk {resetInfo.nama}</span>
+                  <b className="resetsecret">{resetInfo.secret}</b>
+                  <span>
+                    Kirim lewat chat pribadi (bukan grup). Login pakai {resetInfo.jenis}, lalu minta segera ganti
+                    di menu "Ganti PIN / password". Sandi ini tidak bisa dilihat lagi setelah panel ditutup.
+                  </span>
+                  <div className="row">
+                    <Button variant="primary" onClick={() => void salinSandi()}>Salin</Button>
+                    <Button variant="secondary" onClick={() => setResetInfo(null)}>Tutup</Button>
+                  </div>
+                </div>
+              )}
               <h2>Diblokir karena salah PIN ({blocks.length})</h2>
               {blocks.length === 0
                 ? <Empty text="Tidak ada akun yang diblokir." />
@@ -377,9 +415,14 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
                           <td>{(faces.find((f) => f.memberId === m.id)?.count ?? 0) || '—'}</td>
                           <td><span className="presrow"><i className={on ? 'onlinedot' : 'offlinedot'} aria-hidden="true" />{on ? 'online' : 'offline'}</span></td>
                           <td>
-                            <Button variant="danger" className="supdelbtn" ariaLabel={`Hapus ${m.nama}`} onClick={() => void hapus(m.id, m.nama)}>
-                              Hapus
-                            </Button>
+                            <span className="supacts">
+                              <Button variant="secondary" className="supdelbtn" ariaLabel={`Reset sandi ${m.nama}`} onClick={() => void resetSandi(m.id, m.nama)}>
+                                Reset sandi
+                              </Button>
+                              <Button variant="danger" className="supdelbtn" ariaLabel={`Hapus ${m.nama}`} onClick={() => void hapus(m.id, m.nama)}>
+                                Hapus
+                              </Button>
+                            </span>
                           </td>
                         </tr>
                       );

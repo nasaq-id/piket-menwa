@@ -576,6 +576,22 @@ export async function setKontak(
   }
 }
 
+// Superadmin: reset sandi anggota yang lupa → PIN/password sementara (tampil sekali).
+export async function resetMemberSecret(
+  id: string,
+): Promise<{ ok: true; authType: AuthType; secret: string } | { ok: false; error: string }> {
+  try {
+    const r = await fetch(`/api/super/members/${encodeURIComponent(id)}/reset-secret`, {
+      method: 'POST',
+      headers: { ...(getSuperPin() ? { 'x-super-pin': getSuperPin() as string } : {}) },
+    });
+    const j = (await r.json()) as { authType: AuthType; secret: string; error?: string };
+    return r.ok ? { ok: true, authType: j.authType, secret: j.secret } : { ok: false, error: j.error ?? 'gagal reset' };
+  } catch {
+    return { ok: false, error: 'offline' };
+  }
+}
+
 export async function deleteMember(id: string): Promise<boolean> {
   try {
     const r = await fetch(`/api/members/${id}`, {

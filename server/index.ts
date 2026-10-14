@@ -2,7 +2,7 @@ import cors from 'cors';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import express from 'express';
 import fs from 'node:fs';
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import webpush from 'web-push';
 import { db } from '../db/client.ts';
@@ -990,6 +990,32 @@ app.put('/api/members/:id/kontak', (req, res) => {
   const { angkatan, ...rest } = ident;
   db.update(members).set(angkatan ? ident : rest).where(eq(members.id, id)).run();
   res.json({ ok: true });
+});
+
+// ---- reset sandi lupa (SUPERADMIN) ----
+// Buat PIN/password SEMENTARA sesuai jenis login anggota; ditampilkan sekali
+// ke superadmin untuk dikirim ke orangnya, lalu anggota menggantinya sendiri.
+const tempSecret = (authType: AuthType, angkatan: string): string => {
+  if (authType === 'pin') {
+    for (;;) {
+      const p = Array.from({ length: 6 }, () => randomInt(10)).join('');
+      if (!pinError(p, angkatan)) return p;
+    }
+  }
+  const huruf = 'abcdefghjkmnpqrstuvwxyz'; // tanpa i/l/o biar tidak tertukar 1/0
+  let pw = '';
+  for (let i = 0; i < 4; i++) pw += huruf[randomInt(huruf.length)];
+  for (let i = 0; i < 4; i++) pw += String(randomInt(10));
+  return pw;
+};
+app.post('/api/super/members/:id/reset-secret', requireSuper, (req, res) => {
+  const m = db.select().from(members).where(eq(members.id, req.params.id)).all()[0];
+  if (!m) return void res.status(404).json({ error: 'anggota tidak ditemukan' });
+  const authType: AuthType = m.authType === 'pin' ? 'pin' : 'password';
+  const secret = tempSecret(authType, m.angkatan ?? '');
+  db.update(members).set({ pinHash: hashPin(secret), authType }).where(eq(members.id, m.id)).run();
+  db.delete(pinGuard).where(eq(pinGuard.key, `m:${m.id}`)).run();
+  res.set('Cache-Control', 'no-store').json({ ok: true, authType, secret });
 });
 
 // ---- hapus anggota (Admin): bersih + file ikut dibuang ----
