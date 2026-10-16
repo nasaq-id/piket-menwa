@@ -94,7 +94,9 @@ app.get('/uploads-signed/evidence/:file', (req, res) => {
   res.sendFile(path.resolve(UPLOAD_DIR, relPath));
 });
 
-const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] as const;
+const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] as const;
+// Date.getDay() 0=Minggu..6=Sabtu → index DAYS 0=Senin..6=Minggu.
+const dayIndexOf = (dow: number): number => (dow + 6) % 7;
 
 // ---- role: user vs admin(ketua). Aksi admin wajib header x-admin-pin ----
 const ADMIN_PIN = needEnv('ADMIN_PIN', '1234');
@@ -1078,9 +1080,7 @@ app.get('/api/attendance', (req, res) => {
 });
 
 const onDutyAt = (tanggal: string, memberId: string): string | null => {
-  const dow = new Date(tanggal + 'T00:00').getDay();
-  if (dow < 1 || dow > 5) return null;
-  const day = DAYS[dow - 1];
+  const day = DAYS[dayIndexOf(new Date(tanggal + 'T00:00').getDay())];
   const rows = effectiveRosterDay(day, mondayOf(tanggal));
   return rows.some((r) => r.memberId === memberId) ? memberId : null;
 };
@@ -1107,9 +1107,7 @@ const effectiveRosterDay = (day: string, week: string) => {
 // Baris roster EFEKTIF utk member+tanggal (jam mulai/selesai yg diatur admin):
 // override minggu itu kalau ada (drag-drop tab Mingguan), fallback template dasar.
 const rosterRowAt = (tanggal: string, memberId: string) => {
-  const dow = new Date(tanggal + 'T00:00').getDay();
-  if (dow < 1 || dow > 5) return null;
-  const day = DAYS[dow - 1];
+  const day = DAYS[dayIndexOf(new Date(tanggal + 'T00:00').getDay())];
   const week = mondayOf(tanggal);
   const overrideRow = db.select().from(roster)
     .where(and(eq(roster.weekStart, week), eq(roster.day, day), eq(roster.memberId, memberId))).all()[0];
@@ -1296,9 +1294,7 @@ app.post('/api/evidence', (req, res) => {
   if (!checkAttest(attest, memberId, tanggal)) {
     return void res.status(403).json({ error: 'verifikasi wajah/PIN dulu hari ini' });
   }
-  const dow = new Date(tanggal + 'T00:00').getDay();
-  const dayName = dow >= 1 && dow <= 5 ? DAYS[dow - 1] : null;
-  const onDuty = dayName && onDutyAt(tanggal, memberId);
+  const onDuty = onDutyAt(tanggal, memberId);
   if (!onDuty) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
   if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   const task = ensureChecks(tanggal, memberId).find((t) => t.judul === tugas);
@@ -1466,16 +1462,13 @@ app.get('/api/nilai/leaderboard', requireSuper, (req, res) => {
   const end = new Date(t + 'T00:00');
   while (d <= end) {
     const tanggal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const dow = d.getDay();
-    if (dow >= 1 && dow <= 5) {
-      const day = DAYS[dow - 1];
-      const week = mondayOf(tanggal);
-      const crew = new Set(effectiveRosterDay(day, week).map((r) => r.memberId));
-      for (const mid of crew) {
-        const m = allMembers.find((x) => x.id === mid);
-        const e = (by[mid] ??= { nama: m?.nama ?? mid, vals: [] });
-        e.vals.push(nilaiOtomatis(tanggal, mid));
-      }
+    const day = DAYS[dayIndexOf(d.getDay())];
+    const week = mondayOf(tanggal);
+    const crew = new Set(effectiveRosterDay(day, week).map((r) => r.memberId));
+    for (const mid of crew) {
+      const m = allMembers.find((x) => x.id === mid);
+      const e = (by[mid] ??= { nama: m?.nama ?? mid, vals: [] });
+      e.vals.push(nilaiOtomatis(tanggal, mid));
     }
     d.setDate(d.getDate() + 1);
   }
@@ -1513,13 +1506,10 @@ app.get('/api/nilai/detail', requireSuper, (req, res) => {
   const end = new Date(t + 'T00:00');
   while (d <= end) {
     const tanggal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const dow = d.getDay();
-    if (dow >= 1 && dow <= 5) {
-      const day = DAYS[dow - 1];
-      const week = mondayOf(tanggal);
-      const crew = new Set(effectiveRosterDay(day, week).map((r) => r.memberId));
-      if (crew.has(memberId)) rows.push({ tanggal, ...nilaiKomponen(tanggal, memberId) });
-    }
+    const day = DAYS[dayIndexOf(d.getDay())];
+    const week = mondayOf(tanggal);
+    const crew = new Set(effectiveRosterDay(day, week).map((r) => r.memberId));
+    if (crew.has(memberId)) rows.push({ tanggal, ...nilaiKomponen(tanggal, memberId) });
     d.setDate(d.getDate() + 1);
   }
   rows.sort((a, b) => (a.tanggal < b.tanggal ? 1 : -1));
@@ -1588,31 +1578,27 @@ const runH1Reminder = async (forceDate?: string): Promise<{ sent: number; tangga
   const sentKey = `reminder_sent_${today}`;
   const already = db.select().from(settings).where(eq(settings.key, sentKey)).all()[0];
   if (already && !forceDate) return { sent: 0, tanggal };
-  const dow = tm.getDay();
-  if (dow >= 1 && dow <= 5) {
-    const day = DAYS[dow - 1];
-    const week = mondayOf(tanggal);
-    const crew = effectiveRosterDay(day, week);
-    for (const r of crew) {
-      const m = db.select().from(members).where(eq(members.id, r.memberId)).all()[0];
-      if (!m) continue;
-      await sendPush(
-        r.memberId, 'Besok giliran piket',
-        `${m.nama}, besok (${day}) piket ${r.jamMulai}–${r.jamSelesai}. Jangan lupa!`, '/',
-      );
-    }
-    if (crew.length && !already) {
-      db.insert(settings).values({ key: sentKey, value: tanggal }).run();
-    }
-    // Bersih-bersih penanda lama.
-    for (const s of db.select().from(settings).all()) {
-      if (s.key.startsWith('reminder_sent_') && s.key !== sentKey) {
-        db.delete(settings).where(eq(settings.key, s.key)).run();
-      }
-    }
-    return { sent: crew.length, tanggal };
+  const day = DAYS[dayIndexOf(tm.getDay())];
+  const week = mondayOf(tanggal);
+  const crew = effectiveRosterDay(day, week);
+  for (const r of crew) {
+    const m = db.select().from(members).where(eq(members.id, r.memberId)).all()[0];
+    if (!m) continue;
+    await sendPush(
+      r.memberId, 'Besok giliran piket',
+      `${m.nama}, besok (${day}) piket ${r.jamMulai}–${r.jamSelesai}. Jangan lupa!`, '/',
+    );
   }
-  return { sent: 0, tanggal };
+  if (crew.length && !already) {
+    db.insert(settings).values({ key: sentKey, value: tanggal }).run();
+  }
+  // Bersih-bersih penanda lama.
+  for (const s of db.select().from(settings).all()) {
+    if (s.key.startsWith('reminder_sent_') && s.key !== sentKey) {
+      db.delete(settings).where(eq(settings.key, s.key)).run();
+    }
+  }
+  return { sent: crew.length, tanggal };
 };
 
 app.post('/api/cron/reminder', requireSuper, async (req, res) => {

@@ -5,7 +5,7 @@ import {
   type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
 import { GripVertical } from 'lucide-react';
-import { DAYS, dateStr } from '../piket';
+import { DAY_ABBR, DAYS, dateStr } from '../piket';
 import type { Member } from '../api';
 import type { DayKey } from '../piket';
 import { Button } from './Button';
@@ -68,7 +68,7 @@ function DragDayColumn({ day, abbr, dateNum, isToday, ids, members, disabled }: 
   );
 }
 
-// Papan drag-drop 5 kolom (Senin-Jumat) untuk 1 minggu spesifik. State draft
+// Papan drag-drop 7 kolom (Senin-Minggu) untuk 1 minggu spesifik. State draft
 // dikelola di App (dragSchedule) — komponen ini murni UI + DndContext.
 export function WeekDragBoard({
   weekLoading, dragSchedule, dragDirty, dragSaving, weekOverridden, weekDates, members,
@@ -85,7 +85,7 @@ export function WeekDragBoard({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
   );
-  const ABBR2 = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'];
+  const ABBR2 = DAY_ABBR;
   const today = dateStr(0);
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));

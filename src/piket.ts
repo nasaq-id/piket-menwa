@@ -1,5 +1,7 @@
-export type DayKey = 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat';
-export const DAYS: DayKey[] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+export type DayKey = 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat' | 'Sabtu' | 'Minggu';
+export const DAYS: DayKey[] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+// Singkatan sejajar index DAYS — dipakai tab Mingguan, papan drag, dan label tanggal.
+export const DAY_ABBR = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
 export interface Member {
   id: string;
@@ -26,6 +28,10 @@ export const DEFAULT_SCHEDULE: Record<DayKey, string[]> = {
   Rabu: ['daniel', 'izni'],
   Kamis: ['adlan', 'baskara'],
   Jumat: ['andrian', 'maxwell'],
+  // Piket 7 hari: Sabtu & Minggu ikut aktif. Template sengaja kosong —
+  // admin mengisi personelnya lewat tab Mingguan (tambah/hapus personel).
+  Sabtu: [],
+  Minggu: [],
 };
 
 export const DEFAULT_TASKS = ['Sapu & pel sekret', 'Buang sampah', 'Rapikan inventaris'];
@@ -54,15 +60,16 @@ export function save(key: string, val: unknown) {
   localStorage.setItem(key, JSON.stringify(val));
 }
 
+// Piket 7 hari: setiap tanggal punya kunci hari. 'Libur' tetap ada di tipe
+// supaya pemanggil lama tidak perlu diubah, tapi tidak pernah dikembalikan.
 export function todayKeyID(): DayKey | 'Libur' {
-  // 0=Minggu..6=Sabtu ; Senin=1..Jumat=5
-  const d = new Date().getDay();
-  return d >= 1 && d <= 5 ? DAYS[d - 1] : 'Libur';
+  const d = new Date().getDay(); // 0=Minggu..6=Sabtu
+  return DAYS[(d + 6) % 7];
 }
 
 export function tomorrowKeyID(): DayKey | 'Libur' {
-  const d = (new Date().getDay() + 1) % 7;
-  return d >= 1 && d <= 5 ? DAYS[d - 1] : 'Libur';
+  const d = (new Date().getDay() + 1) % 7; // 0=Minggu..6=Sabtu
+  return DAYS[(d + 6) % 7];
 }
 
 export function dateStr(offset = 0): string {

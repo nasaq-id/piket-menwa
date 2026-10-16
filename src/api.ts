@@ -301,7 +301,7 @@ export async function loadWeekRoster(
 ): Promise<{ schedule: Record<DayKey, string[]>; jam: Record<DayKey, string>; overridden: boolean } | null> {
   const s = await get<{ roster: WeekRosterRow[]; overridden: boolean }>(`/api/roster/week?start=${weekStart}`);
   if (!s) return null;
-  const schedule = { Senin: [], Selasa: [], Rabu: [], Kamis: [], Jumat: [] } as Record<DayKey, string[]>;
+  const schedule = { Senin: [], Selasa: [], Rabu: [], Kamis: [], Jumat: [], Sabtu: [], Minggu: [] } as Record<DayKey, string[]>;
   const jam = {} as Record<DayKey, string>;
   for (const r of s.roster) {
     schedule[r.day].push(r.memberId);

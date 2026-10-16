@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { ArrowLeftRight, Check, Clock, Plus, Repeat, X } from 'lucide-react';
-import { DAYS, dateStr, type DayKey } from '../piket';
+import { DAY_ABBR, DAYS, dateStr, type DayKey } from '../piket';
 import { isOnline } from '../api';
 import type { AppStore } from '../hooks/useAppStore';
 import { WeekDragBoard } from '../components/WeekDragBoard';
@@ -65,7 +65,7 @@ export function MingguanTab({ store }: { store: AppStore }) {
             const crewIds = state?.schedule[d] ?? [];
             return (
               <div key={d} className={`dayrow ${isToday ? 'now' : ''}`}>
-                <div className="dleft"><b>{['Sen', 'Sel', 'Rab', 'Kam', 'Jum'][i]}</b><span>{new Date(ds + 'T00:00').getDate()}</span></div>
+                <div className="dleft"><b>{DAY_ABBR[i]}</b><span>{new Date(ds + 'T00:00').getDate()}</span></div>
                 <div className="dmain">
                   <span className="crewchips">{crewIds.map((id) => {
                     const m = members.find((x) => x.id === id);

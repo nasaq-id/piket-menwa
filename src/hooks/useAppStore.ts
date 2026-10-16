@@ -14,7 +14,7 @@ import { getGeo, compressPhoto, stampPhoto, type Geo } from '../bukti';
 import { ting } from '../face';
 import { captureQrFromUrl, clearSavedQr, getSavedQr, saveQr } from '../qr';
 import { angkatanFromNbp, profileSchema, type Profile } from '../Welcome';
-import { DAYS, dateStr, load, pinSalahMsg, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
+import { DAY_ABBR, DAYS, dateStr, load, pinSalahMsg, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
 
 export type Tab = 'hari' | 'minggu' | 'tukar';
 
@@ -330,8 +330,8 @@ export function useAppStore() {
   }, [approvedSwaps]);
   const bellDot = tmr !== 'Libur' && (state?.schedule[tmr] ?? []).includes(me);
 
-  // ---- Mingguan: tanggal Senin–Jumat minggu tampil + status selesai per tanggal ----
-  const ABBR = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'];
+  // ---- Mingguan: tanggal Senin–Minggu minggu tampil + status selesai per tanggal ----
+  const ABBR = DAY_ABBR;
   const weekDates = useMemo(() => {
     const now = new Date();
     const dow = (now.getDay() + 6) % 7; // Senin=0
@@ -349,8 +349,8 @@ export function useAppStore() {
     let live = true;
     (async () => {
       const out: Record<string, boolean> = {};
-      const evRows = state?.fromApi && admin ? await loadEvidence(weekDates[0], weekDates[4]) : null;
-      const lapRows = state?.fromApi && admin ? await loadLapsit(weekDates[0], weekDates[4]) : null;
+      const evRows = state?.fromApi && admin ? await loadEvidence(weekDates[0], weekDates[6]) : null;
+      const lapRows = state?.fromApi && admin ? await loadLapsit(weekDates[0], weekDates[6]) : null;
       if (live) {
         const grouped: Record<string, EvidenceRow[]> = {};
         for (const e of evRows ?? []) {
@@ -360,7 +360,7 @@ export function useAppStore() {
       }
       if (!admin) { if (live) setWeekStat({}); return; } // non-admin: rekap tim tidak dibuka (privasi per-orang)
       await Promise.all(weekDates.map(async (ds, i) => {
-        const dayKey = DAYS[i]; // weekDates disusun Senin..Jumat, selaras index DAYS
+        const dayKey = DAYS[i]; // weekDates disusun Senin..Minggu, selaras index DAYS
         const dayCrew = state?.schedule[dayKey] ?? [];
         if (dayCrew.length === 0) return;
         // SEMUA anggota yang piket hari itu wajib lengkap sendiri-sendiri
@@ -412,7 +412,7 @@ export function useAppStore() {
 
   const rangeLabel = (() => {
     const a = new Date(weekDates[0] + 'T00:00');
-    const b = new Date(weekDates[4] + 'T00:00');
+    const b = new Date(weekDates[6] + 'T00:00');
     const m = new Intl.DateTimeFormat('id-ID', { month: 'long' });
     return a.getMonth() === b.getMonth()
       ? `${a.getDate()}–${b.getDate()} ${m.format(b)}`
@@ -420,10 +420,13 @@ export function useAppStore() {
   })();
 
   const putarRotasi = async () => {    if (!state || !admin) return;
-    const ok = await ask({ title: 'Putar rotasi?', message: 'Crew tiap hari geser maju 1 hari (Jumat → Senin).', confirmLabel: 'Putar' });
+    const ok = await ask({ title: 'Putar rotasi?', message: 'Crew tiap hari geser maju 1 hari (Minggu → Senin).', confirmLabel: 'Putar' });
     if (!ok) return;
     const sch = state.schedule;
-    const next = { Senin: sch.Jumat, Selasa: sch.Senin, Rabu: sch.Selasa, Kamis: sch.Rabu, Jumat: sch.Kamis };
+    const next = {
+      Senin: sch.Minggu, Selasa: sch.Senin, Rabu: sch.Selasa, Kamis: sch.Rabu,
+      Jumat: sch.Kamis, Sabtu: sch.Jumat, Minggu: sch.Sabtu,
+    };
     setState({ ...state, schedule: next });
     if (state.fromApi) await saveRosterRemote(next, state.jam);
     else save('piket-schedule', next);

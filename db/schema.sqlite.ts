@@ -20,7 +20,7 @@ export const members = sqliteTable('members', {
 
 export const roster = sqliteTable('roster', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  day: text('day').notNull(), // Senin..Jumat
+  day: text('day').notNull(), // Senin..Minggu
   memberId: text('member_id')
     .notNull()
     .references(() => members.id),
