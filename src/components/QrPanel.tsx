@@ -7,7 +7,7 @@ import { ShakeErr } from './Motion';
 
 // Superadmin: QR statis mako untuk absen (pengganti scan wajah). Cetak / simpan
 // gambarnya, tempel di mako. Bocor? "Buat QR baru" — QR lama langsung tidak berlaku.
-export function QrPanel({ ask }: { ask: (o: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => Promise<boolean> }) {
+export function QrPanel({ ask, faceEnabled }: { ask: (o: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => Promise<boolean>; faceEnabled: boolean }) {
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [img, setImg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,6 +35,12 @@ export function QrPanel({ ask }: { ask: (o: { title: string; message: string; co
   return (
     <div className="card makopanel">
       <b><QrCode size={15} /> QR absen mako</b>
+      {faceEnabled && (
+        <p className="hint">
+          <b>Sedang tidak dipakai.</b> Absen memakai <b>scan wajah</b>, jadi QR ini tidak berpengaruh
+          walau ditempel di mako. Simpan sebagai cadangan — kalau mode wajah dimatikan, QR ini aktif lagi.
+        </p>
+      )}
       {token === null && <p className="hint werr">QR belum bisa dimuat — cek koneksi / PIN superadmin.</p>}
       {img && <img src={img} alt="QR absen mako" width={240} height={240} style={{ alignSelf: 'center', background: '#fff', borderRadius: 8 }} />}
       {token && <p className="hint">Kode manual: <b>{token}</b></p>}

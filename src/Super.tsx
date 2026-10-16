@@ -544,7 +544,7 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
             <>
               <h2>Pengaturan absen</h2>
               <MakoPanel />
-              <QrPanel ask={ask} />
+              <QrPanel ask={ask} faceEnabled={state?.faceEnabled ?? false} />
             </>
           )}
         </motion.div>
