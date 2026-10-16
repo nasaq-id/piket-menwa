@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useDragControls } from 'framer-motion';
-import { X } from 'lucide-react';
+import { ScanFace, X } from 'lucide-react';
 import { useEffect, type RefObject } from 'react';
 import type { AuthType, Member } from '../api';
 import { SecretField } from '../Welcome';
@@ -8,6 +8,7 @@ import { Button } from './Button';
 export function LogoutSheet({
   member, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, onSaveSecret, onEditKontak,
   avatarBusy, avatarInputRef, onAvatarFile, onRemoveAvatar, onLogout, ask, onClose,
+  faceEnabled, face, onFaceEnroll,
 }: {
   member: Member;
   secretType: AuthType; setSecretType: (t: AuthType) => void;
@@ -16,6 +17,7 @@ export function LogoutSheet({
   avatarInputRef: RefObject<HTMLInputElement | null>;
   onAvatarFile: (f: File | undefined) => void; onRemoveAvatar: () => void;
   onLogout: () => void;
+  faceEnabled: boolean; face: { hasFace: boolean } | null; onFaceEnroll: () => void;
   ask: (opts: { title: string; message: string; confirmLabel?: string; danger?: boolean }) => Promise<boolean>;
   onClose: () => void;
 }) {
@@ -91,6 +93,19 @@ export function LogoutSheet({
           </div>
           <Button variant="secondary" onClick={onEditKontak}>Ubah NBP / WA / alias</Button>
         </section>
+        {faceEnabled && (
+          <section className="sheetsec" aria-label="Wajah">
+            <h4>Wajah</h4>
+            <p className="hint">
+              {face?.hasFace
+                ? 'Wajahmu sudah terdaftar — dipakai untuk login wajah & absen di mako.'
+                : 'Wajahmu belum terdaftar. Daftarkan sekali untuk login wajah & absen di mako.'}
+            </p>
+            <Button variant={face?.hasFace ? 'secondary' : 'primary'} onClick={() => void onFaceEnroll()}>
+              <ScanFace size={14} /> {face?.hasFace ? 'Perbarui wajah' : 'Tambah wajah'}
+            </Button>
+          </section>
+        )}
         <section className="sheetsec" aria-label="Keamanan">
           <h4>Keamanan</h4>
           <SecretField

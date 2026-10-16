@@ -9,7 +9,7 @@ import { analyzeFrame, FACE_CFG, REJECT_MSG, type FrameReject, type FrameResult 
 
 // identify = login pakai wajah saja (cari di semua anggota); login = daftar ulang wajah
 // setelah login manual (template belum ada).
-export type Purpose = 'register' | 'login' | 'identify' | 'absen';
+export type Purpose = 'register' | 'login' | 'identify' | 'absen' | 'enroll';
 export type Action = 'kiri' | 'kanan';
 
 const TTL_MS = 30_000;

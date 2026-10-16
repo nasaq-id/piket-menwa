@@ -385,7 +385,7 @@ export const clearAttest = () => {
 // ---- Verifikasi wajah di server (challenge-response) ----
 // HP hanya memotret; server (CompreFace + anti-spoofing) yang menilai.
 export type FaceAction = 'kiri' | 'kanan';
-export type FacePurpose = 'register' | 'login' | 'identify' | 'absen';
+export type FacePurpose = 'register' | 'login' | 'identify' | 'absen' | 'enroll';
 export async function requestChallenge(
   purpose: FacePurpose, extra: { preToken?: string; memberId?: string; geo?: GeoFix | null } = {},
 ): Promise<{ ok: true; challengeId: string; action: FaceAction } | { ok: false; error: string }> {
@@ -547,6 +547,24 @@ export async function loginCredential(ident: string, secret: string) {
 
 export async function loginEnrollFace(preToken: string, challengeId: string, frames: string[]) {
   return keepAttest(await postResult<LoginOk>('/api/login/enroll-face', { preToken, challengeId, frames }, 'daftar wajah gagal'));
+}
+
+// ---- Kelola wajah dari Profil (jalur kedua selain pendaftaran) ----
+export async function getMyFace(memberId: string): Promise<{ hasFace: boolean; updatedAt?: number | null } | null> {
+  const attest = getAttest(memberId, dateStr(0));
+  return get<{ hasFace: boolean; updatedAt?: number | null }>(
+    `/api/faces/me?memberId=${encodeURIComponent(memberId)}&attest=${encodeURIComponent(attest ?? '')}`,
+  );
+}
+
+export async function enrollMyFace(
+  memberId: string, challengeId: string, frames: string[],
+): Promise<{ ok: true; data: { replaced: boolean } } | { ok: false; error: string }> {
+  return postResult<{ replaced: boolean }>(
+    '/api/faces/enroll',
+    { memberId, challengeId, frames, attest: getAttest(memberId, dateStr(0)) },
+    'gagal menyimpan wajah',
+  );
 }
 
 export async function loginIdentify(challengeId: string, frames: string[]) {

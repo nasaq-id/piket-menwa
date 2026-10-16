@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConfirm } from './useConfirm';
 import {
   cancelSwapRemote, clearPin, clearAttest, clearWeekRosterRemote, createSwapRemote, decideSwapRemote,
-  dropPush, ensurePush, getAttest, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
+  dropPush, ensurePush, enrollMyFace, getAttest, getMyFace, loadAttendance, loadBreakdown, loadChecks, loadEvidence, loadFaceSummary,
   loadNilaiToday, requestChallenge,
   loadLapsit, loadState, loadWeekRoster, localChecks, loginCredential, loginEnrollFace, loginIdentify, markAttendance, markAttendanceQr, ping,
   registerMember, saveRosterRemote, saveWeekRosterRemote, setKontak, setLoginSecret, setProfilePhoto, submitLapsit,
@@ -50,7 +50,9 @@ export function useAppStore() {
   const absenGeoRef = useRef<Geo | null>(null);
   // Kamera scan wajah: daftar, login pakai wajah (identify), daftar ulang wajah
   // setelah login manual (enroll), atau absen piket.
-  const [cam, setCam] = useState<null | { mode: 'absen' | 'identify' | 'enroll' | 'register' }>(null);
+  const [cam, setCam] = useState<null | { mode: 'absen' | 'identify' | 'enroll' | 'register' | 'profile-enroll' }>(null);
+  // Status wajah anggota yang sedang login — dipakai sheet Profil.
+  const [myFace, setMyFace] = useState<{ hasFace: boolean } | null>(null);
   // Hasil langkah 1 login (kredensial lolos) — menunggu verifikasi wajah.
   // Login manual lolos tapi akun belum punya template wajah → tunggu daftar ulang wajah.
   const [pendingLogin, setPendingLogin] = useState<{ preToken: string; memberId: string; nama: string } | null>(null);
@@ -629,9 +631,41 @@ export function useAppStore() {
     });
   };
 
+  // ---- Kelola wajah dari Profil: tambah kalau belum ada, ganti kalau sudah ----
+  const loadMyFace = useCallback(async () => {
+    if (!faceEnabled || !me || !state?.fromApi) { setMyFace(null); return; }
+    const r = await getMyFace(me);
+    setMyFace(r ?? null);
+  }, [faceEnabled, me, state?.fromApi]);
+
+  const startFaceEnroll = async () => {
+    if (!faceEnabled || !me) return;
+    if (!state?.fromApi) {
+      setToast({ msg: 'Butuh online untuk scan wajah.', kind: 'error' });
+      return;
+    }
+    if (myFace?.hasFace) {
+      const ok = await ask({
+        title: 'Perbarui wajah?',
+        message: 'Wajah lama akan diganti dengan hasil scan baru. Pastikan pencahayaan terang.',
+        confirmLabel: 'Lanjut scan',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    setShowLogout(false);
+    setCam({ mode: 'profile-enroll' });
+  };
+
+  // Segarkan status wajah tiap sheet Profil dibuka.
+  useEffect(() => {
+    if (showLogout) void loadMyFace();
+  }, [showLogout, loadMyFace]);
+
   // ---- Scan wajah: tiap mode punya cara minta challenge & kirim frame ----
   const faceChallenge = () => {
     if (cam?.mode === 'enroll') return requestChallenge('login', { preToken: pendingLogin?.preToken });
+    if (cam?.mode === 'profile-enroll') return requestChallenge('enroll', { memberId: me });
     if (cam?.mode === 'identify') return requestChallenge('identify');
     if (cam?.mode === 'absen') return requestChallenge('absen', { memberId: me, geo: absenGeoRef.current });
     return requestChallenge('register');
@@ -662,6 +696,14 @@ export function useAppStore() {
       enterAs(r.data.memberId, r.data.nama);
       setToast({ msg: 'Wajah terdaftar — selamat datang!', kind: 'ok' });
       void getGeo().then(setGeo);
+      return { ok: true };
+    }
+    if (cam?.mode === 'profile-enroll') {
+      const r = await enrollMyFace(me, challengeId, frames);
+      if (!r.ok) return r;
+      setCam(null);
+      setToast({ msg: r.data.replaced ? 'Wajah diperbarui' : 'Wajah terdaftar', kind: 'ok' });
+      await loadMyFace();
       return { ok: true };
     }
     if (cam?.mode === 'absen') {
@@ -968,7 +1010,7 @@ export function useAppStore() {
     doneCount, pending, incoming, outgoing, othersPending, approvedSwaps, swappedDays,
     bellDot, ABBR, weekDates, rangeLabel, putarRotasi, dayDate, mySlots,
     taskTap, onFile, pickPhoto, toggleBd, kirimLapsit, needVerify,
-    logout, onProfileDone, credLogin, faceLogin, faceChallenge, faceSubmit,
+    logout, onProfileDone, credLogin, faceLogin, faceChallenge, faceSubmit, myFace, startFaceEnroll,
     pendingLoginName: pendingLogin?.nama ?? null,
     submitSwap, decide, cancelSwap, addTo, removeFrom, jamColon, setJam,
     moveWeekMember, saveWeekDrag, resetWeekDrag, clearWeekOverride,

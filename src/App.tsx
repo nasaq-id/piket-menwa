@@ -34,7 +34,9 @@ export default function App() {
           ? 'Login dengan wajah'
           : cam.mode === 'enroll'
             ? `Daftarkan wajah${store.pendingLoginName ? ` — ${store.pendingLoginName}` : ''}`
-            : `Absen ${store.nama(me)}`}
+            : cam.mode === 'profile-enroll'
+              ? (store.myFace?.hasFace ? 'Perbarui wajah' : 'Tambah wajah')
+              : `Absen ${store.nama(me)}`}
       getChallenge={store.faceChallenge}
       submit={store.faceSubmit}
       onClose={() => store.setCam(null)}
@@ -121,6 +123,9 @@ export default function App() {
             onRemoveAvatar={() => void store.removeAvatar()}
             onLogout={store.logout}
             ask={store.ask}
+            faceEnabled={store.faceEnabled}
+            face={store.myFace}
+            onFaceEnroll={() => void store.startFaceEnroll()}
             onClose={() => store.setShowLogout(false)}
           />
         )}

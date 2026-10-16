@@ -784,7 +784,58 @@ app.post('/api/face/challenge', faceOnly, rateLimit(30, 60_000), (req, res) => {
     if (!geo.ok) return void res.status(400).json({ error: geo.error });
     return void res.json(issueChallenge('absen', memberId));
   }
+  if (purpose === 'enroll') {
+    // Kelola wajah dari Profil: butuh login hari ini (attest) + mode wajah aktif.
+    if (!FACE_ENABLED) return void res.status(404).json({ error: 'Verifikasi wajah dimatikan.' });
+    if (!memberId || !checkAttest(attest, memberId, todayLocal())) {
+      return void res.status(403).json({ error: 'Login dulu hari ini.' });
+    }
+    return void res.json(issueChallenge('enroll', memberId));
+  }
   res.status(400).json({ error: 'purpose invalid' });
+});
+
+// ---- Kelola wajah sendiri dari Profil (jalur kedua selain pendaftaran) ----
+// Anggota yang sudah login bisa mendaftarkan wajahnya sendiri, atau mengganti
+// template lamanya, tanpa perlu admin. Verifikasi tetap lewat pipeline yang
+// sama dengan absen (challenge-response + liveness + anti-spoof).
+app.get('/api/faces/me', (req, res) => {
+  const { memberId, attest } = req.query as Record<string, string | undefined>;
+  if (!FACE_ENABLED) return void res.status(404).json({ error: 'Verifikasi wajah dimatikan.' });
+  if (!memberId || !checkAttest(attest, memberId, todayLocal())) {
+    return void res.status(403).json({ error: 'Login dulu hari ini.' });
+  }
+  const row = db.select().from(faces).where(eq(faces.memberId, memberId)).all()[0];
+  res.json({ hasFace: !!row, updatedAt: row?.updatedAt ?? null });
+});
+
+app.post('/api/faces/enroll', faceOnly, rateLimit(20, 60_000), async (req, res) => {
+  if (!FACE_ENABLED) return void res.status(404).json({ error: 'Verifikasi wajah dimatikan.' });
+  const { memberId, attest } = (req.body ?? {}) as { memberId?: string; attest?: string };
+  if (!memberId || !checkAttest(attest, memberId, todayLocal())) {
+    return void res.status(403).json({ error: 'Login dulu hari ini.' });
+  }
+  const member = db.select().from(members).where(eq(members.id, memberId)).all()[0];
+  if (!member) return void res.status(400).json({ error: 'anggota invalid' });
+  const replaced = !!loadTemplate(memberId);
+  let face;
+  try {
+    face = await verifyFace(req.body ?? {}, 'enroll', memberId, req.header('user-agent'));
+  } catch (e) {
+    return faceError(res, e);
+  }
+  if (!face.ok) return void res.status(face.status).json({ error: face.error });
+  const { front, turn, scores } = face.out;
+  // Satu wajah tetap satu akun: kalau cocok dengan anggota LAIN, tolak.
+  const owner = faceOwner(front, memberId);
+  if (owner && owner.sim >= FACE_CFG.matchMin) {
+    logCheck({ purpose: 'enroll', memberId, ok: false, reason: 'duplicate', scores, similarity: owner.sim });
+    const who = db.select({ nama: members.nama }).from(members).where(eq(members.id, owner.memberId)).all()[0];
+    return void res.status(409).json({ error: `Wajah ini sudah terdaftar${who ? ` sebagai ${who.nama}` : ''} — hubungi admin.` });
+  }
+  saveTemplate(memberId, [front, turn]);
+  logCheck({ purpose: 'enroll', memberId, ok: true, reason: replaced ? 'replaced' : 'enrolled', scores });
+  res.json({ ok: true, replaced });
 });
 
 // Cek ketersediaan WA/NBP di langkah Kontak — biar gagal cepat sebelum scan wajah.
