@@ -40,7 +40,9 @@ services:
     restart: unless-stopped
     environment:
       - ML_PORT=3000
-      - IMG_LENGTH_LIMIT=640
+      # 1024 (dari 640): wajah di frame HP lebih detail sebelum deteksi. Tidak
+      # mengubah model/calculator, jadi template wajah lama tetap cocok.
+      - IMG_LENGTH_LIMIT=1024
       # 2 proses = sama dengan dev laptop; frame satu scan dinilai paralel.
       - UWSGI_PROCESSES=2
       - UWSGI_THREADS=1

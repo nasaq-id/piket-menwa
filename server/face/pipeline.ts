@@ -21,10 +21,16 @@ export const FACE_CFG = {
   // di atas turnMin = menoleh. Dikalibrasi dari tes kamera asli.
   // Tes kamera HP 2026-09-28: depan |turn| ≤ 0.047, menoleh ≈ 0.18–0.20.
   frontalMax: num('FACE_FRONTAL_MAX', 0.06),
-  turnMin: num('FACE_TURN_MIN', 0.12),
+  // 0.09 (dari 0.12): user yang menoleh "tanggung" (~0.10) sebelumnya ditolak
+  // padahal wajahnya asli. Foto datar nilainya ~0, jadi anti-spoof praktis sama.
+  turnMin: num('FACE_TURN_MIN', 0.09),
+  // Di bawah luma ini frame dianggap terlalu gelap -> alasan 'too_dark' yang bisa
+  // diperbaiki user, bukan 'spoof' yang menakutkan. Data lapangan 2026-10-17:
+  // percobaan gagal-gelap luma 18.8, percobaan sukses luma 43.9.
+  darkLuma: num('FACE_DARK_LUMA', 35),
 };
 
-export type FrameReject = 'no_face' | 'multi_face' | 'too_small' | 'spoof';
+export type FrameReject = 'no_face' | 'multi_face' | 'too_small' | 'too_dark' | 'spoof';
 export interface FrameResult {
   face: DetectedFace;
   calculator: string;
@@ -82,6 +88,9 @@ export async function analyzeFrame(jpeg: Buffer): Promise<
   diag.liveV2 = d.v2;
   diag.liveV1se = d.v1se;
   diag.luma = d.luma;
+  // Gelap diperiksa SEBELUM liveness: di tempat gelap skor liveness tidak bisa
+  // dipercaya, dan user butuh alasan yang bisa dia perbaiki (cari cahaya).
+  if (d.luma < FACE_CFG.darkLuma) return { ok: false, reason: 'too_dark', live: d.score, diag };
   if (d.score < FACE_CFG.liveMin) return { ok: false, reason: 'spoof', live: d.score, diag };
   const [e1, e2, nose] = face.landmarks;
   const turn = (nose[0] - (e1[0] + e2[0]) / 2) / fw;
@@ -98,5 +107,6 @@ export const REJECT_MSG: Record<FrameReject, string> = {
   no_face: 'Wajah tidak terdeteksi — pastikan wajah terlihat jelas dan cukup cahaya.',
   multi_face: 'Terdeteksi lebih dari satu wajah — pastikan hanya kamu di depan kamera.',
   too_small: 'Wajah terlalu jauh — dekatkan HP ke wajah.',
+  too_dark: 'Terlalu gelap — pindah ke tempat lebih terang (cahaya dari depan), jangan di bayangan.',
   spoof: 'Wajah tidak lolos cek wajah asli. Jauhkan HP ±30–40 cm, cari tempat terang, tahan diam, lalu coba lagi.',
 };

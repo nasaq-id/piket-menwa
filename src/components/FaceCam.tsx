@@ -255,6 +255,9 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
         transition={{ duration: 0.22, ease: 'easeOut' }}
       >
         <b>{title}</b>
+        {phase === 'ready' && (
+          <p className="hint">Cahaya dari depan · jarak 30–40 cm · isi oval dengan wajah</p>
+        )}
         <div className="camstage">
           <div className="camview">
             <video ref={videoRef} playsInline muted autoPlay />

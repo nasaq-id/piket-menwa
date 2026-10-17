@@ -151,7 +151,7 @@ export async function runChallenge(
     if (!t.ok) {
       // Ada wajah lain di frame mana pun = tolak seluruh scan.
       if (t.reason === 'multi_face') return { ok: false, reason: t.reason, msg: REJECT_MSG[t.reason], scores };
-      if (t.reason === 'spoof') spoof ??= t;
+      if (t.reason === 'spoof' || t.reason === 'too_dark') spoof ??= t;
       continue;
     }
     // Log: frame yang paling jauh menoleh ke arah yang diminta.
