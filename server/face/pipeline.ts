@@ -15,6 +15,11 @@ export const FACE_CFG = {
   matchMin: num('FACE_MATCH_MIN', 0.9),
   // Skor MiniFASNet rata-rata 2 model; referensi Silent-Face memakai argmax (≈0.5).
   liveMin: num('FACE_LIVE_MIN', 0.8),
+  // Jalan kedua: kalau satu model sangat yakin asli (>= liveStrong) dan model lain
+  // tidak menolak ekstrem (>= liveFloor), terima. Data 17 Okt: user asli dapat
+  // V1SE 0.95-0.99 tapi V2 anjlok 0.23-0.40 (crop kecil), rata-rata jadi < 0.8.
+  liveStrong: num('FACE_LIVE_STRONG', 0.9),
+  liveFloor: num('FACE_LIVE_FLOOR', 0.15),
   // Lebar kotak wajah minimal (px) — wajah terlalu kecil/jauh = kualitas buruk.
   minFacePx: num('FACE_MIN_PX', 90),
   // Pergeseran hidung thd tengah mata, relatif lebar wajah: di bawah ini = menghadap depan,
@@ -91,7 +96,9 @@ export async function analyzeFrame(jpeg: Buffer): Promise<
   // Gelap diperiksa SEBELUM liveness: di tempat gelap skor liveness tidak bisa
   // dipercaya, dan user butuh alasan yang bisa dia perbaiki (cari cahaya).
   if (d.luma < FACE_CFG.darkLuma) return { ok: false, reason: 'too_dark', live: d.score, diag };
-  if (d.score < FACE_CFG.liveMin) return { ok: false, reason: 'spoof', live: d.score, diag };
+  const livePass = d.score >= FACE_CFG.liveMin
+    || (Math.max(d.v2, d.v1se) >= FACE_CFG.liveStrong && Math.min(d.v2, d.v1se) >= FACE_CFG.liveFloor);
+  if (!livePass) return { ok: false, reason: 'spoof', live: d.score, diag };
   const [e1, e2, nose] = face.landmarks;
   const turn = (nose[0] - (e1[0] + e2[0]) / 2) / fw;
   return { ok: true, frame: { face, calculator, live: d.score, turn }, diag };

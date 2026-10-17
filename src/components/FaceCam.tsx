@@ -91,7 +91,7 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
           throw Object.assign(new Error('Browser tidak mendukung kamera — buka lewat Chrome + HTTPS.'), { name: 'NoSupport' });
         }
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false,
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false,
         });
         if (!alive.current) return;
         const v = videoRef.current;
@@ -125,7 +125,9 @@ export function FaceCam({ title, autoStart = false, getChallenge, submit, onClos
   const grab = (): string | null => {
     const v = videoRef.current;
     if (!v?.videoWidth) return null;
-    const s = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight));
+    // 1024 (dari 640): crop wajah dapat ~2,5x lebih banyak piksel sebelum
+    // model anti-spoof/deteksi menilainya. CompreFace juga di-set IMG_LENGTH_LIMIT=1024.
+    const s = Math.min(1, 1024 / Math.max(v.videoWidth, v.videoHeight));
     const c = document.createElement('canvas');
     c.width = Math.round(v.videoWidth * s);
     c.height = Math.round(v.videoHeight * s);
