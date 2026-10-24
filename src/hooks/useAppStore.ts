@@ -955,18 +955,43 @@ export function useAppStore() {
   };
 
   const enableNotif = async () => {
-    if (!('Notification' in window)) {
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const standalone = (typeof window.matchMedia === 'function'
+      && window.matchMedia('(display-mode: standalone)').matches)
+      || (navigator as unknown as { standalone?: boolean }).standalone === true;
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
       setToast({ msg: 'Browser tidak dukung notifikasi.', kind: 'error' });
       return;
     }
-    const p = await Notification.requestPermission();
-    if (p === 'granted') {
-      if (me) void ensurePush(me);
-      new Notification('Ki Menwa USB YPKP', {
-        body: tmr === 'Libur' ? 'Besok libur, tidak ada piket.'
-          : (state?.schedule[tmr] ?? []).includes(me)
-            ? `H-1: besok (${tmr}) giliran kamu piket!` : `Besok (${tmr}) bukan giliranmu. Aman.`,
+    let p: NotificationPermission = 'denied';
+    try {
+      p = await Notification.requestPermission();
+    } catch {
+      // iOS: di tab Safari biasa izin push memang tidak tersedia.
+    }
+    if (p !== 'granted') {
+      setToast({
+        msg: ios && !standalone
+          ? 'Di iPhone: tambahkan dulu ke Layar Utama (Safari → Bagikan → Tambah ke Layar Utama), lalu nyalakan notifikasi dari aplikasi.'
+          : 'Izin notifikasi ditolak — aktifkan dari pengaturan browser.',
+        kind: 'error',
       });
+      return;
+    }
+    if (me) void ensurePush(me);
+    const body = tmr === 'Libur' ? 'Besok libur, tidak ada piket.'
+      : (state?.schedule[tmr] ?? []).includes(me)
+        ? `H-1: besok (${tmr}) giliran kamu piket!` : `Besok (${tmr}) bukan giliranmu. Aman.`;
+    try {
+      new Notification('Ki Menwa USB YPKP', { body });
+    } catch {
+      // iOS tidak mendukung constructor Notification — pakai service worker.
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification('Ki Menwa USB YPKP', {
+          body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png',
+        });
+      } catch { /* abaikan */ }
     }
   };
 

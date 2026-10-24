@@ -186,13 +186,13 @@
 <div class="page">
   <header class="hero">
     <div class="logo"><img src="__LOGO_SRC__" alt="Logo Piket Menwa" width="72" height="72" /></div>
-    <p class="eyebrow">Aplikasi Android · Sideload</p>
+    <p class="eyebrow">Aplikasi Piket · Android &amp; iPhone</p>
     <h1>Piket Menwa</h1>
     <p class="tagline">Jadwal piket, absensi wajah, bukti foto ber-stempel, dan lapsit — dalam satu aplikasi.</p>
   </header>
 
   <main>
-    <section class="card dl" aria-labelledby="dl-h">
+    <section class="card dl" id="card-android" aria-labelledby="dl-h">
       <h2 id="dl-h" class="sr">Unduh aplikasi</h2>
       <ul class="meta">
         <li>Versi <b>__VERSION__</b></li>
@@ -210,14 +210,32 @@
       </div>
     </section>
 
+    <section class="card dl" id="card-ios" hidden aria-labelledby="ios-h">
+      <h2 id="ios-h" class="sr">Pasang di iPhone</h2>
+      <ul class="meta">
+        <li>Safari</li>
+        <li>iOS 16.4+</li>
+        <li>Tanpa App Store</li>
+      </ul>
+      <a class="btn primary" href="/">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>
+        Buka aplikasi
+      </a>
+      <p class="hint">Lalu ikuti langkah <strong>Tambah ke Layar Utama</strong> di bawah.</p>
+      <div class="row">
+        <button class="btn ghost" type="button" data-copy="__PAGE_URL__">Salin link halaman</button>
+        <button class="btn ghost" type="button" data-copy="__APP_URL__">Salin link aplikasi</button>
+      </div>
+    </section>
+
     <section class="card qr" aria-labelledby="qr-h">
       <h2 id="qr-h">Buka di HP lain</h2>
       <div class="qrbox">__QR_SVG__</div>
-      <p class="hint">Scan pakai kamera HP, lalu buka tautannya di Chrome.</p>
+      <p class="hint">Scan pakai kamera HP, lalu buka tautannya di Chrome (Android) atau Safari (iPhone).</p>
     </section>
 
-    <section class="card steps" aria-labelledby="cara-h">
-      <h2 id="cara-h">Cara pasang</h2>
+    <section class="card steps" id="cara-android" aria-labelledby="cara-h">
+      <h2 id="cara-h">Cara pasang (Android)</h2>
       <ol>
         <li><span><b>Buka di Chrome.</b> Jangan lewat browser dalam aplikasi (WA/IG) — unduhan sering terblokir.</span></li>
         <li><span><b>Tap “Unduh APK”.</b> Kalau Chrome memperingatkan “file berbahaya”, pilih <b>Tetap unduh</b>.</span></li>
@@ -226,14 +244,26 @@
       </ol>
     </section>
 
+    <section class="card steps" id="cara-ios" hidden aria-labelledby="cara-ios-h">
+      <h2 id="cara-ios-h">Cara pasang (iPhone)</h2>
+      <ol>
+        <li><span><b>Buka di Safari.</b> iOS hanya mengizinkan pasang dari Safari, bukan Chrome atau browser dalam aplikasi.</span></li>
+        <li><span><b>Tap tombol Bagikan</b> (ikon kotak dengan panah ke atas) di bawah layar.</span></li>
+        <li><span><b>Pilih “Tambah ke Layar Utama”</b>, lalu tap <b>Tambah</b>.</span></li>
+        <li><span><b>Buka ikon Piket Menwa</b> di layar utama. Notifikasi baru bisa aktif setelah dipasang (iOS 16.4+).</span></li>
+      </ol>
+    </section>
+
     <section class="card note" aria-labelledby="note-h">
       <h2 id="note-h">Catatan</h2>
       <ul>
-        <li>APK ini <b>Trusted Web Activity</b> — pembaruan tampilan &amp; fitur web muncul otomatis tanpa instal ulang.</li>
-        <li>Butuh <b>Android 5.0+</b> dan <b>Google Chrome</b>.</li>
-        <li>Instal versi baru <b>tanpa uninstall</b>, selama tanda tangan APK-nya sama.</li>
-        <li>Kalau unduhan di sini bermasalah, pakai cadangan: <a href="__GH_URL__" rel="noopener">GitHub Release</a>.</li>
-        <li>
+        <li data-android-only>APK ini <b>Trusted Web Activity</b> — pembaruan tampilan &amp; fitur web muncul otomatis tanpa instal ulang.</li>
+        <li data-android-only>Butuh <b>Android 5.0+</b> dan <b>Google Chrome</b>.</li>
+        <li data-android-only>Instal versi baru <b>tanpa uninstall</b>, selama tanda tangan APK-nya sama.</li>
+        <li data-android-only>Kalau unduhan di sini bermasalah, pakai cadangan: <a href="__GH_URL__" rel="noopener">GitHub Release</a>.</li>
+        <li data-ios-only hidden>iPhone tidak memakai APK — aplikasi berjalan sebagai <b>PWA</b> dari Safari. Notifikasi (iOS 16.4+) dan mode layar penuh aktif setelah dipasang ke Layar Utama.</li>
+        <li data-ios-only hidden>Perbarui aplikasi cukup dengan membukanya saat online — tidak ada unduhan ulang.</li>
+        <li data-android-only>
           <details>
             <summary>Verifikasi berkas (SHA-256)</summary>
             <code class="sha">__SHA256__</code>
@@ -282,6 +312,21 @@
         }
       });
     });
+
+    // Deteksi perangkat: iPhone/iPad → tampilkan jalur PWA (Safari, Tambah ke
+    // Layar Utama); Android/desktop → tampilkan jalur APK.
+    var ua = navigator.userAgent || '';
+    var isIos = /iPhone|iPad|iPod/.test(ua)
+      || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1); // iPadOS 13+
+    function tampil(el, ya) { if (el) el.hidden = !ya; }
+    if (isIos) {
+      tampil(document.getElementById('card-android'), false);
+      tampil(document.getElementById('card-ios'), true);
+      tampil(document.getElementById('cara-android'), false);
+      tampil(document.getElementById('cara-ios'), true);
+      document.querySelectorAll('[data-android-only]').forEach(function (el) { el.hidden = true; });
+      document.querySelectorAll('[data-ios-only]').forEach(function (el) { el.hidden = false; });
+    }
   })();
 </script>
 </body>

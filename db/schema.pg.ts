@@ -2,7 +2,7 @@
 // Tabel & kolom identik dengan db/schema.sqlite.ts; hanya tipe dialect yang beda.
 // Migrasi: drizzle-kit generate --config=drizzle.pg.config.ts lalu migrate ke Supabase.
 // Kode server & frontend tidak perlu berubah selain ganti import schema + client.
-import { bigint, doublePrecision, integer, pgTable, text } from 'drizzle-orm/pg-core';
+import { bigint, doublePrecision, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core';
 
 export const members = pgTable('members', {
   id: text('id').primaryKey(),
@@ -100,6 +100,20 @@ export const pushSubs = pgTable('push_subs', {
   sub: text('sub').notNull(),
   createdAt: integer('created_at').notNull(),
 });
+
+// Penanda notifikasi operasional sekali per anggota per hari (mirror SQLite).
+export const notifSent = pgTable(
+  'notif_sent',
+  {
+    tanggal: text('tanggal').notNull(),
+    memberId: text('member_id')
+      .notNull()
+      .references(() => members.id),
+    jenis: text('jenis').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tanggal, t.memberId, t.jenis] })],
+);
 
 export const attestIssued = pgTable('attest_issued', {
   memberId: text('member_id')

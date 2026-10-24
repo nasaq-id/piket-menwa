@@ -6,7 +6,7 @@ import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeE
 import path from 'node:path';
 import webpush from 'web-push';
 import { db } from '../db/client.ts';
-import { attendance, evidence, faces, lapsit, members, pushSubs, roster, swaps, tasks, breakdown } from '../db/schema.sqlite.ts';
+import { attendance, evidence, faces, lapsit, members, notifSent, pushSubs, roster, swaps, tasks, breakdown } from '../db/schema.sqlite.ts';
 import {
   attestIssued, pinGuard, settings, tugasMaster,
 } from '../db/schema.sqlite.ts';
@@ -533,6 +533,32 @@ const sendPush = async (memberId: string, title: string, body: string, url = '/'
       try { db.delete(pushSubs).where(eq(pushSubs.endpoint, s.endpoint)).run(); } catch { /* abaikan */ }
     }
   }
+};
+
+// Catat notifikasi operasional sekali per anggota per hari. true = belum pernah
+// dikirim hari itu (anti-dobel, termasuk setelah server restart).
+const markNotif = (tanggal: string, memberId: string, jenis: string): boolean => {
+  const r = db.insert(notifSent)
+    .values({ tanggal, memberId, jenis, createdAt: Date.now() })
+    .onConflictDoNothing()
+    .run();
+  return Number((r as { changes?: number }).changes ?? 0) > 0;
+};
+
+// Broadcast ke SEMUA perangkat yang langganan push (semua anggota).
+// Dipakai untuk notifikasi operasional: absen, telat, ceklis bukti foto, lapsit.
+const sendPushAll = async (title: string, body: string, url = '/') => {
+  const subs = db.select().from(pushSubs).all();
+  await Promise.allSettled(subs.map(async (s) => {
+    try {
+      await webpush.sendNotification(JSON.parse(s.sub), JSON.stringify({ title, body, url }));
+    } catch (e) {
+      const code = (e as { statusCode?: number }).statusCode;
+      if (code === 404 || code === 410) {
+        try { db.delete(pushSubs).where(eq(pushSubs.endpoint, s.endpoint)).run(); } catch { /* abaikan */ }
+      }
+    }
+  }));
 };
 
 app.get('/api/push/public-key', (_req, res) => res.json({ publicKey: VAPID_PUBLIC }));
@@ -1300,6 +1326,11 @@ app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
     tanggal, memberId, jam, createdAt: Date.now(), status: win.status,
     lat: geo.lat, lng: geo.lng, acc: geo.acc, jarakM: geo.jarakM,
   }).run();
+  // Notifikasi operasional ke semua yang langganan push (absen hari ini saja).
+  if (markNotif(tanggal, memberId, 'absen')) {
+    const ket = win.status === 'terlambat' ? 'terlambat' : 'tepat waktu';
+    void sendPushAll('Absen piket', `${member.nama} absen pukul ${jam} — ${ket}.`, '/');
+  }
   res.json({ ok: true, jam, status: win.status });
 });
 
@@ -1369,6 +1400,21 @@ app.post('/api/evidence', (req, res) => {
   const file = fname; // path relatif disimpan di DB — URL akses selalu di-generate ulang (signed, expired)
   db.insert(evidence).values({ tanggal, tugas, memberId, file, createdAt: Date.now() }).run();
   if (task) db.update(tasks).set({ done: 1 }).where(eq(tasks.id, task.id)).run(); // upload = selesai
+  // Notifikasi ceklis bukti foto WAJIB (4 item template), bukan 34 rincian.
+  if (tanggal === todayLocal()) {
+    const tpl = db.select({ judul: tasks.judul }).from(tasks).where(eq(tasks.tanggal, 'template')).all();
+    const judulTpl = new Set(tpl.map((t) => t.judul));
+    if (judulTpl.has(tugas)) {
+      const fotoTpl = new Set(
+        db.select().from(evidence)
+          .where(and(eq(evidence.tanggal, tanggal), eq(evidence.memberId, memberId))).all()
+          .map((e) => e.tugas).filter((t) => judulTpl.has(t)),
+      ).size;
+      if (markNotif(tanggal, memberId, `foto:${tugas}`)) {
+        void sendPushAll('Ceklis bukti foto', `${member.nama}: ${tugas} (${fotoTpl}/${judulTpl.size} foto wajib).`, '/');
+      }
+    }
+  }
   res.json({ ok: true, file: makeSignedEvidenceUrl(`evidence/${fname}`) });
 });
 
@@ -1437,6 +1483,11 @@ app.post('/api/lapsit', (req, res) => {
     acc: typeof acc === 'number' ? Math.round(acc) : null,
     createdAt: Date.now(),
   }).run();
+  // Notifikasi operasional: petugas pulang / piket selesai (hanya untuk hari ini).
+  if (tanggal === todayLocal() && markNotif(tanggal, memberId, 'lapsit')) {
+    const ringkas = note.length > 70 ? `${note.slice(0, 70)}…` : note;
+    void sendPushAll('Piket selesai', `${member.nama} pulang — lapsit: "${ringkas}".`, '/');
+  }
   res.json({ ok: true, id: Number(row.lastInsertRowid) });
 });
 
@@ -1664,6 +1715,40 @@ setInterval(() => {
     if (t.getHours() === 19 && t.getMinutes() < 5) void runH1Reminder();
   } catch (e) {
     console.warn('H-1 scheduler error:', (e as Error).message);
+  }
+}, 60_000);
+
+// ---- pengingat telat absen: lewat ABSEN_TELAT_MENIT (default 15) dari jam
+// masuk dan belum absen → broadcast sekali per anggota, selama jam piket masih
+// berjalan (biar tidak menembak saat server restart setelah piket selesai).
+const pushTelatSekali = async () => {
+  const tanggal = todayLocal();
+  const now = new Date();
+  const day = DAYS[dayIndexOf(new Date(tanggal + 'T00:00').getDay())];
+  const rows = effectiveRosterDay(day, mondayOf(tanggal));
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.memberId)) continue;
+    seen.add(r.memberId);
+    if (now < atJam(tanggal, r.jamMulai, ABSEN.telatMenit)) continue;
+    if (now > atJam(tanggal, r.jamSelesai)) continue;
+    if (hasAttended(tanggal, r.memberId)) continue;
+    if (!markNotif(tanggal, r.memberId, 'telat')) continue;
+    const m = db.select().from(members).where(eq(members.id, r.memberId)).all()[0];
+    if (!m) continue;
+    void sendPushAll(
+      'Belum absen',
+      `${m.nama} belum absen — sudah lewat ${ABSEN.telatMenit} menit dari jam masuk (${r.jamMulai}).`,
+      '/',
+    );
+  }
+};
+
+setInterval(() => {
+  try {
+    void pushTelatSekali().catch((e) => console.warn('scheduler telat error:', (e as Error).message));
+  } catch (e) {
+    console.warn('scheduler telat error:', (e as Error).message);
   }
 }, 60_000);
 

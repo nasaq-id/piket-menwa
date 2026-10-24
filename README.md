@@ -38,6 +38,16 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 ### 🔔 Pengingat H-1
 - Server mengirim push pengingat ke petugas piket besok, **otomatis tiap hari pukul 19.00** (waktu server), sekali per hari. Bisa juga dipicu manual/cron eksternal lewat `POST /api/cron/reminder` (PIN superadmin).
 
+### 📣 Notifikasi Operasional (broadcast)
+Dikirim ke **semua perangkat yang mengaktifkan notifikasi** (tabel `push_subs`), sekali per anggota per hari
+(tabel `notif_sent`, anti-dobel termasuk setelah server restart):
+- **Absen masuk** — "nama absen pukul HH.MM — tepat waktu/terlambat".
+- **Telat absen** — pengingat otomatis **15 menit setelah jam masuk** (`ABSEN_TELAT_MENIT`) kalau belum absen,
+  selama jam piket masih berjalan (scheduler per menit, in-process).
+- **Ceklis bukti foto wajib** — tiap upload dari 4 bukti foto template ("nama: judul tugas (2/4 foto wajib)").
+  Rincian 34 item tidak memicu push (biar tidak spam).
+- **Pulang / piket selesai** — saat lapsit dikirim ("nama pulang — lapsit: ...").
+
 ### 🏆 Penilaian Otomatis (real-time, tanpa verifikasi manual)
 - **60%** foto bukti • **30%** checklist 34 item • **10%** lapsit → nilai 0–100 + **leaderboard** (khusus superadmin, anggota tidak melihat nilai orang lain).
 - Master 34 tugas + bobot (total 100) di-seed dari standar; N/A hanya untuk item Kondisional (dikunci di UI + API + CHECK constraint DB).
@@ -195,6 +205,10 @@ membuat proyek Android-nya (hasil generate & manifest asli di-gitignore).
   `bubblewrap build --skipPwaValidation` (password lewat env `BUBBLEWRAP_KEYSTORE_PASSWORD`/`BUBBLEWRAP_KEY_PASSWORD`) →
   `gh release create vX.Y.Z piket-menwa.apk --latest` (nama aset **harus** `piket-menwa.apk` supaya link tetap di atas ikut pindah).
 - Perubahan tampilan/fitur web **tidak** butuh APK baru — TWA selalu memuat versi web terbaru. APK baru hanya kalau nama/ikon/izin/warna berubah.
+- **iPhone tidak memakai APK** — aplikasi dikonfigurasi sebagai PWA: buka domain di **Safari** → **Bagikan** → **Tambah ke Layar Utama**.
+  Manifest `display: standalone`, `apple-touch-icon` 180×180, dan meta `apple-mobile-web-app-*` sudah disiapkan; kamera/QR jalan lewat
+  `playsInline` + fallback jsQR. Notifikasi web di iOS baru aktif pada **iOS 16.4+** dan **setelah dipasang** ke Layar Utama.
+  Halaman `/unduh/` mendeteksi perangkat: Android dapat tombol APK, iPhone dapat langkah "Tambah ke Layar Utama".
 
 **Halaman unduh `/unduh/`:** dilayani nginx VPS publik dari `/var/www/piket-menwa-unduh/` (halaman HTML + berkas
 `piket-menwa.apk`). Isinya tombol unduh, QR, cara pasang, versi/ukuran, dan SHA-256 APK. Template di repo sengaja tanpa

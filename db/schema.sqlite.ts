@@ -1,6 +1,6 @@
 // Skema SQLite (dev lokal). Kolom & tipe dibuat portabel agar 1:1 bisa
 // dimigrasi ke PostgreSQL/Supabase — lihat db/schema.pg.ts untuk padanannya.
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const members = sqliteTable('members', {
   id: text('id').primaryKey(),
@@ -115,6 +115,21 @@ export const pushSubs = sqliteTable('push_subs', {
   sub: text('sub').notNull(), // JSON subscription
   createdAt: integer('created_at').notNull(),
 });
+
+// Penanda notifikasi operasional sekali per anggota per hari (anti-dobel,
+// termasuk saat server restart). jenis: absen | telat | lapsit | foto:<tugas>.
+export const notifSent = sqliteTable(
+  'notif_sent',
+  {
+    tanggal: text('tanggal').notNull(), // YYYY-MM-DD
+    memberId: text('member_id')
+      .notNull()
+      .references(() => members.id),
+    jenis: text('jenis').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tanggal, t.memberId, t.jenis] })],
+);
 // Bukti match wajah hari ini: dasar token atestasi (1 hari, multi-pakai).
 export const attestIssued = sqliteTable('attest_issued', {
   memberId: text('member_id')

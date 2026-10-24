@@ -177,18 +177,24 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
     mq.addEventListener('change', ubah);
     return () => mq.removeEventListener('change', ubah);
   }, []);
-  // Tautan unduh APK cuma berguna di HP Android yang membuka web (belum pasang aplikasi).
-  // Di TWA/PWA standalone disembunyikan: APK tidak bisa diunduh dari dalam aplikasi,
-  // dan penggunanya memang sudah punya aplikasi.
-  const [tampilApk, setTampilApk] = useState(false);
-  useEffect(() => {
-    if (typeof navigator === 'undefined') return;
-    const android = /Android/i.test(navigator.userAgent);
-    const standalone = typeof window.matchMedia === 'function'
-      && window.matchMedia('(display-mode: standalone)').matches;
-    const twa = document.referrer.startsWith('android-app://');
-    setTampilApk(android && !standalone && !twa);
-  }, []);
+  // Tautan pasang aplikasi cuma berguna saat aplikasi dibuka di browser HP
+  // (belum dipasang): Android → APK, iPhone → PWA via "Tambah ke Layar Utama".
+  // Di TWA/PWA standalone disembunyikan (APK tidak bisa diunduh dari dalam app,
+  // dan pengguna iPhone standalone sudah memasangnya). Dihitung sekali saat
+  // render pertama — tidak ada setState di effect.
+  const [tautan] = useState<'apk' | 'ios' | null>(() => {
+    if (typeof navigator === 'undefined') return null;
+    const ua = navigator.userAgent;
+    const android = /Android/i.test(ua);
+    const ios = /iPhone|iPad|iPod/.test(ua)
+      || (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1); // iPadOS 13+ menyamar jadi Mac
+    const standalone = (typeof window.matchMedia === 'function'
+      && window.matchMedia('(display-mode: standalone)').matches)
+      || (navigator as unknown as { standalone?: boolean }).standalone === true; // iOS home-screen
+    const twa = typeof document !== 'undefined' && document.referrer.startsWith('android-app://');
+    if (standalone || twa) return null;
+    return android ? 'apk' : ios ? 'ios' : null;
+  });
   // Placeholder mengetik satu contoh bergantian (tanpa awalan "contoh:"),
   // berhenti saat field sudah berisi — sama gaya dengan field nama wizard.
   const loginAnim = useTypingPlaceholder(LOGIN_CONTOH, showForm && ident === '' && !kurangiGerak);
@@ -294,9 +300,11 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
         <motion.p className="whint" {...fade(0.32)}>
           Belum punya akun? <button className="wlink" onClick={onRegister}>Daftar</button>
         </motion.p>
-        {tampilApk && (
+        {tautan && (
           <motion.p className="whint" {...fade(0.36)}>
-            Pakai Android? <a className="wlink" href="/unduh/">Unduh APK</a>
+            {tautan === 'apk'
+              ? <>Pakai Android? <a className="wlink" href="/unduh/">Unduh APK</a></>
+              : <>Pakai iPhone? <a className="wlink" href="/unduh/">Pasang di Layar Utama</a></>}
           </motion.p>
         )}
         <motion.p

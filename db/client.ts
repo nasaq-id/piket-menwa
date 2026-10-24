@@ -84,6 +84,13 @@ CREATE TABLE IF NOT EXISTS push_subs (
   member_id TEXT NOT NULL REFERENCES members(id),
   sub TEXT NOT NULL, created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS notif_sent (
+  tanggal TEXT NOT NULL,
+  member_id TEXT NOT NULL REFERENCES members(id),
+  jenis TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (tanggal, member_id, jenis)
+);
 CREATE TABLE IF NOT EXISTS tugas_master (
   no INTEGER PRIMARY KEY, kategori TEXT NOT NULL, judul TEXT NOT NULL UNIQUE,
   bobot INTEGER NOT NULL, jenis TEXT NOT NULL, foto_wajib INTEGER NOT NULL DEFAULT 0
