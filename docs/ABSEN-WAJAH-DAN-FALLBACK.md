@@ -49,6 +49,38 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "x-api-key: $K" \
 Kalau tunnel yang mati, cek di sandbox: `sudo systemctl status piket-cf-tunnel`.
 Kalau container yang mati: `sudo docker ps` di sandbox (harusnya otomatis nyala lagi karena `restart: unless-stopped`).
 
+## Kalau sandbox Instabox-nya mati (penyebab paling sering)
+
+CompreFace **tidak** jalan di VPS app (RAM 1 GB tidak cukup) — ia jalan di sandbox Instabox.
+Mesin free otomatis **pause setelah 8 jam berjalan** (cap 480 menit/run) atau 30 menit idle.
+Saat sandbox mati, tunnel `127.0.0.1:8100` hilang → app mengembalikan pesan "Layanan verifikasi wajah
+sedang tidak tersedia".
+
+VPS app punya `piket-keepalive.timer` yang sekarang **self-healing tiap 5 menit**:
+
+1. memperpanjang activity lease (anti-pause karena idle), dan
+2. kalau sandbox ternyata mati (`HTTP 409 machine_not_running`), **membangunkan otomatis** lewat API
+   `POST /v1/machines/<id>/wake` lalu menunggu port `8100` hidup lagi (maks ~2 menit).
+
+Cek statusnya di VPS app:
+
+```bash
+systemctl status piket-keepalive --no-pager      # run terakhir: "lease ok"
+journalctl -u piket-keepalive -n 20 --no-pager   # kalau ada "sandbox tidak jalan (409)" -> auto wake
+ss -ltn | grep 8100                              # tunnel hidup?
+```
+
+Kalau masih kosong, bangunkan manual dari laptop yang punya akses Instabox:
+
+```bash
+instabox wake abdul-server    # nama mesin sandbox CompreFace piket-menwa
+instabox get abdul-server     # pastikan State: Running
+```
+
+Setelah sandbox Running, container (`piket-cf-*`) dan `piket-cf-tunnel.service` nyala otomatis;
+tunggu ±30–60 detik sampai port `8100` muncul di VPS app. Sementara itu, anggota tetap bisa absen
+lewat jalur QR kalau `FACE_ENABLED=false` (lihat bagian atas).
+
 ## Balik lagi ke mode wajah (kalau sudah beres)
 
 ```bash
