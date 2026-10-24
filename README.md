@@ -211,6 +211,19 @@ Di nginx (`deploy/nginx/piket-menwa.conf`): `location = /unduh/` menyajikan HTML
 `piket-menwa-<versi>.apk` + arahkan symlink `piket-menwa.apk` ke situ, lalu bangun & unggah ulang `index.html` supaya
 versi/ukuran/SHA di halaman ikut baru. Halaman tidak di-cache service worker (`src/sw.ts` mengecualikan `/unduh/`).
 
+**Sinkron ke repo rilis (`nasaq-id/piket-menwa`):** monorepo ini sumber utama; repo rilis dipakai GitHub Actions untuk
+deploy. Jangan edit langsung di repo rilis — sinkronkan dengan `deploy/sinkron-mirror.sh` (`git subtree split` + push
+**fast-forward**, tanpa force). Push ke `master` repo rilis **otomatis deploy** ke VPS produksi, jadi skrip menampilkan
+ringkasan dan minta konfirmasi dulu:
+
+```bash
+deploy/sinkron-mirror.sh --dry-run        # lihat commit yang akan dikirim (tanpa push)
+deploy/sinkron-mirror.sh                  # konfirmasi + push (memicu deploy)
+deploy/sinkron-mirror.sh --yes --watch    # tanpa tanya, tunggu workflow deploy sampai selesai
+```
+
+Butuh `gh` yang sudah login (`gh auth setup-git`) untuk push lewat HTTPS dan memantau run.
+
 Opsi lain:
 
 - **Frontend** → Vercel / static hosting (HTTPS wajib untuk kamera + push).
