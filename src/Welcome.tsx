@@ -177,6 +177,18 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
     mq.addEventListener('change', ubah);
     return () => mq.removeEventListener('change', ubah);
   }, []);
+  // Tautan unduh APK cuma berguna di HP Android yang membuka web (belum pasang aplikasi).
+  // Di TWA/PWA standalone disembunyikan: APK tidak bisa diunduh dari dalam aplikasi,
+  // dan penggunanya memang sudah punya aplikasi.
+  const [tampilApk, setTampilApk] = useState(false);
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const android = /Android/i.test(navigator.userAgent);
+    const standalone = typeof window.matchMedia === 'function'
+      && window.matchMedia('(display-mode: standalone)').matches;
+    const twa = document.referrer.startsWith('android-app://');
+    setTampilApk(android && !standalone && !twa);
+  }, []);
   // Placeholder mengetik satu contoh bergantian (tanpa awalan "contoh:"),
   // berhenti saat field sudah berisi — sama gaya dengan field nama wizard.
   const loginAnim = useTypingPlaceholder(LOGIN_CONTOH, showForm && ident === '' && !kurangiGerak);
@@ -282,6 +294,11 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
         <motion.p className="whint" {...fade(0.32)}>
           Belum punya akun? <button className="wlink" onClick={onRegister}>Daftar</button>
         </motion.p>
+        {tampilApk && (
+          <motion.p className="whint" {...fade(0.36)}>
+            Pakai Android? <a className="wlink" href="/unduh/">Unduh APK</a>
+          </motion.p>
+        )}
         <motion.p
           className="wsecure"
           initial={{ opacity: 0 }}
