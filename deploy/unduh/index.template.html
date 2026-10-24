@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f1413" />
+<meta name="color-scheme" content="dark" />
+<title>Unduh APK — Piket Menwa</title>
+<meta name="description" content="Unduh aplikasi Android Piket Menwa: jadwal piket, absensi wajah, bukti foto ber-stempel, dan lapsit." />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Unduh APK — Piket Menwa" />
+<meta property="og:description" content="Jadwal piket, absensi wajah, bukti foto, dan lapsit dalam satu aplikasi Android." />
+<meta property="og:url" content="__PAGE_URL__" />
+<link rel="icon" href="/favicon.png" />
+<style>
+  :root {
+    --bg: #070a09;
+    --card: #101715;
+    --card-2: #161d1b;
+    --line: #2a3532;
+    --ink: #f2f5f3;
+    --dim: #9db0aa;
+    --accent: #e8f0ec;
+    --on-accent: #101715;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100svh;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #14201d 0%, transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    line-height: 1.5;
+    padding: calc(24px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+  }
+  .page { max-width: 540px; margin: 0 auto; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid #7dd3fc;
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
+  .sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* ---------- hero ---------- */
+  .hero { text-align: center; padding: 8px 8px 24px; }
+  .logo {
+    width: 92px; height: 92px; margin: 0 auto 18px;
+    border-radius: 26px;
+    display: grid; place-items: center;
+    background: linear-gradient(145deg, #1e2a27, #0f1413);
+    border: 1px solid var(--line);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .55), 0 0 0 6px rgba(232, 240, 236, .04);
+  }
+  .logo img { width: 72px; height: 72px; object-fit: contain; display: block; }
+  .eyebrow {
+    margin: 0 0 6px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: .18em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  h1 { margin: 0; font-size: clamp(26px, 8vw, 32px); line-height: 1.15; letter-spacing: -.02em; }
+  .tagline { margin: 10px auto 0; max-width: 40ch; color: var(--dim); font-size: 15px; }
+
+  /* ---------- cards ---------- */
+  .card {
+    background: linear-gradient(180deg, var(--card-2), var(--card));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 15px; letter-spacing: .02em; color: var(--ink); }
+
+  /* download */
+  .dl { padding: 20px; }
+  .meta {
+    list-style: none; display: flex; flex-wrap: wrap; gap: 8px;
+    margin: 0 0 16px; padding: 0;
+  }
+  .meta li {
+    font-size: 12px; color: var(--dim);
+    border: 1px solid var(--line);
+    background: #0c1210;
+    padding: 5px 10px; border-radius: 999px;
+  }
+  .meta li b { color: var(--ink); font-weight: 600; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%;
+    min-height: 56px;
+    border-radius: 14px;
+    font: inherit; font-size: 17px; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .btn:active { transform: scale(.985); }
+  .btn.primary {
+    background: var(--accent); color: var(--on-accent);
+    border: 1px solid var(--accent);
+    box-shadow: 0 10px 26px rgba(232, 240, 236, .12);
+  }
+  .btn.primary:hover { filter: brightness(1.04); }
+  .btn svg { flex: none; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .btn.ghost {
+    min-height: 44px; font-size: 13px; font-weight: 600;
+    background: transparent; color: var(--dim);
+    border: 1px solid var(--line);
+  }
+  .btn.ghost:hover { color: var(--ink); border-color: #3a4a45; }
+  .hint { margin: 14px 0 0; font-size: 13px; color: var(--dim); text-align: center; }
+  .hint strong { color: var(--ink); }
+
+  /* qr */
+  .qr { text-align: center; }
+  .qrbox {
+    width: min(232px, 68vw); margin: 0 auto;
+    padding: 12px; background: #fff; border-radius: 18px;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, .35);
+  }
+  .qrbox svg { display: block; width: 100%; height: auto; }
+
+  /* steps */
+  ol { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 14px; }
+  ol li {
+    counter-increment: step;
+    display: grid; grid-template-columns: 30px 1fr; gap: 12px;
+    font-size: 14px; color: var(--dim);
+  }
+  ol li::before {
+    content: counter(step);
+    width: 30px; height: 30px; border-radius: 999px;
+    display: grid; place-items: center;
+    background: #0c1210; border: 1px solid var(--line);
+    color: var(--ink); font-size: 13px; font-weight: 700;
+  }
+  ol b { color: var(--ink); font-weight: 650; }
+
+  /* notes */
+  .note ul { margin: 0; padding-left: 18px; display: grid; gap: 9px; font-size: 13.5px; color: var(--dim); }
+  .note b { color: var(--ink); font-weight: 600; }
+  details { margin-top: 2px; }
+  summary { cursor: pointer; color: var(--dim); }
+  summary:hover { color: var(--ink); }
+  .sha {
+    display: block; margin-top: 8px; padding: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px; line-height: 1.6; color: var(--ink);
+    background: #0c1210; border: 1px solid var(--line); border-radius: 10px;
+    overflow-wrap: anywhere;
+  }
+
+  footer { text-align: center; color: var(--dim); font-size: 12px; padding: 14px 8px 0; }
+  footer p { margin: 2px 0; }
+
+  /* toast */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom));
+    transform: translate(-50%, 16px);
+    background: var(--accent); color: var(--on-accent);
+    font-size: 13px; font-weight: 600;
+    padding: 10px 16px; border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+    z-index: 10;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .toast { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <div class="logo"><img src="__LOGO_SRC__" alt="Logo Piket Menwa" width="72" height="72" /></div>
+    <p class="eyebrow">Aplikasi Android · Sideload</p>
+    <h1>Piket Menwa</h1>
+    <p class="tagline">Jadwal piket, absensi wajah, bukti foto ber-stempel, dan lapsit — dalam satu aplikasi.</p>
+  </header>
+
+  <main>
+    <section class="card dl" aria-labelledby="dl-h">
+      <h2 id="dl-h" class="sr">Unduh aplikasi</h2>
+      <ul class="meta">
+        <li>Versi <b>__VERSION__</b></li>
+        <li><b>__SIZE__</b></li>
+        <li>__DATE__</li>
+      </ul>
+      <a class="btn primary" href="__APK_URL__" download="__APK_FILENAME__" rel="noopener">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>
+        Unduh APK
+      </a>
+      <p class="hint">Buka halaman ini di <strong>Google Chrome</strong> di HP Android.</p>
+      <div class="row">
+        <button class="btn ghost" type="button" data-copy="__PAGE_URL__">Salin link halaman</button>
+        <button class="btn ghost" type="button" data-copy="__APK_LINK__">Salin link APK</button>
+      </div>
+    </section>
+
+    <section class="card qr" aria-labelledby="qr-h">
+      <h2 id="qr-h">Buka di HP lain</h2>
+      <div class="qrbox">__QR_SVG__</div>
+      <p class="hint">Scan pakai kamera HP, lalu buka tautannya di Chrome.</p>
+    </section>
+
+    <section class="card steps" aria-labelledby="cara-h">
+      <h2 id="cara-h">Cara pasang</h2>
+      <ol>
+        <li><span><b>Buka di Chrome.</b> Jangan lewat browser dalam aplikasi (WA/IG) — unduhan sering terblokir.</span></li>
+        <li><span><b>Tap “Unduh APK”.</b> Kalau Chrome memperingatkan “file berbahaya”, pilih <b>Tetap unduh</b>.</span></li>
+        <li><span><b>Instal.</b> Buka berkas yang terunduh, izinkan <b>sumber tidak dikenal</b> bila diminta, lalu <b>Instal</b>.</span></li>
+        <li><span><b>Login.</b> Pakai NBP / No. WhatsApp + PIN. Aplikasi selalu memuat versi web terbaru.</span></li>
+      </ol>
+    </section>
+
+    <section class="card note" aria-labelledby="note-h">
+      <h2 id="note-h">Catatan</h2>
+      <ul>
+        <li>APK ini <b>Trusted Web Activity</b> — pembaruan tampilan &amp; fitur web muncul otomatis tanpa instal ulang.</li>
+        <li>Butuh <b>Android 5.0+</b> dan <b>Google Chrome</b>.</li>
+        <li>Instal versi baru <b>tanpa uninstall</b>, selama tanda tangan APK-nya sama.</li>
+        <li>Kalau unduhan di sini bermasalah, pakai cadangan: <a href="__GH_URL__" rel="noopener">GitHub Release</a>.</li>
+        <li>
+          <details>
+            <summary>Verifikasi berkas (SHA-256)</summary>
+            <code class="sha">__SHA256__</code>
+          </details>
+        </li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Piket Menwa USB YPKP</p>
+    <p><a href="/">Buka aplikasi web</a></p>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">Tersalin</div>
+<script>
+  (function () {
+    var toast = document.getElementById('toast');
+    var timer;
+    function showToast(text) {
+      toast.textContent = text;
+      toast.classList.add('show');
+      clearTimeout(timer);
+      timer = setTimeout(function () { toast.classList.remove('show'); }, 1800);
+    }
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.getAttribute('data-copy');
+        function fallback() {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); showToast('Tersalin'); }
+          catch (e) { showToast('Gagal menyalin'); }
+          document.body.removeChild(ta);
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(function () { showToast('Tersalin'); }, fallback);
+        } else {
+          fallback();
+        }
+      });
+    });
+  })();
+</script>
+</body>
+</html>

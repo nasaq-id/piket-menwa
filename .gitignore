@@ -38,6 +38,10 @@ face-lab-log.jsonl
 
 # nilai produksi (domain, alamat VPS) — lokal saja
 deploy/deploy.env
+# hasil generate halaman unduh (berisi domain asli + QR) — lokal saja
+deploy/unduh/index.html
+# direktori kerja sementara
+.tmp-*/
 # proyek Android hasil generate Bubblewrap + twa-manifest.json asli (berisi domain produksi) — lokal saja.
 # Yang di-commit cuma android/twa-manifest.example.json.
 android/*

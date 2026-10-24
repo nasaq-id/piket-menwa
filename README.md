@@ -5,6 +5,7 @@ Progressive Web App untuk **jadwal piket, absensi wajah, bukti foto ber-stempel,
 > Frontend PWA (installable, offline-ready) + APK Android (TWA, sideload) + backend Express + SQLite via Drizzle (siap migrasi ke Supabase Postgres).
 >
 > **APK Android terbaru:** https://github.com/nohypelabs/piket-menwa/releases/latest/download/piket-menwa.apk
+> — atau halaman unduh ramah HP di `/unduh/` domain aplikasi (tombol unduh + QR + cara pasang).
 
 ---
 
@@ -194,6 +195,21 @@ membuat proyek Android-nya (hasil generate & manifest asli di-gitignore).
   `bubblewrap build --skipPwaValidation` (password lewat env `BUBBLEWRAP_KEYSTORE_PASSWORD`/`BUBBLEWRAP_KEY_PASSWORD`) →
   `gh release create vX.Y.Z piket-menwa.apk --latest` (nama aset **harus** `piket-menwa.apk` supaya link tetap di atas ikut pindah).
 - Perubahan tampilan/fitur web **tidak** butuh APK baru — TWA selalu memuat versi web terbaru. APK baru hanya kalau nama/ikon/izin/warna berubah.
+
+**Halaman unduh `/unduh/`:** dilayani nginx VPS publik dari `/var/www/piket-menwa-unduh/` (halaman HTML + berkas
+`piket-menwa.apk`). Isinya tombol unduh, QR, cara pasang, versi/ukuran, dan SHA-256 APK. Template di repo sengaja tanpa
+domain asli; dibangun dari `APP_URL` (`deploy/deploy.env`):
+
+```bash
+node deploy/unduh/build.mjs                       # -> deploy/unduh/index.html (di-gitignore, berisi domain + QR)
+scp deploy/unduh/index.html root@PUBLIC_HOST:/var/www/piket-menwa-unduh/index.html
+ssh root@PUBLIC_HOST 'nginx -t && systemctl reload nginx'
+```
+
+Di nginx (`deploy/nginx/piket-menwa.conf`): `location = /unduh/` menyajikan HTML (tampil biasa), `location /unduh/` memaksa
+`Content-Disposition: attachment` untuk berkas `.apk`, dan `/unduh` redirect 301 ke `/unduh/`. Ganti APK = unggah
+`piket-menwa-<versi>.apk` + arahkan symlink `piket-menwa.apk` ke situ, lalu bangun & unggah ulang `index.html` supaya
+versi/ukuran/SHA di halaman ikut baru. Halaman tidak di-cache service worker (`src/sw.ts` mengecualikan `/unduh/`).
 
 Opsi lain:
 
