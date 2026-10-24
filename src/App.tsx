@@ -9,7 +9,7 @@ import { KontakSheet } from './components/KontakSheet';
 import { LogoutSheet } from './components/LogoutSheet';
 import { PhotoPreview } from './components/PhotoPreview';
 import { PinSheet } from './components/PinSheet';
-import { NotifPrompt } from './components/NotifPrompt';
+import { IzinPrompt } from './components/IzinPrompt';
 import { Toast } from './components/Toast';
 import { HariTab } from './tabs/HariTab';
 import { MingguanTab } from './tabs/MingguanTab';
@@ -85,7 +85,7 @@ export default function App() {
           : <i className="pdot" style={{ background: meMember.warna }} />}
         onAvatar={() => store.setShowLogout(true)}
       />
-      <NotifPrompt onEnable={store.enableNotif} />
+      <IzinPrompt onEnableNotif={store.enableNotif} />
       <AnimatePresence>
         {showPin && (
           <PinSheet

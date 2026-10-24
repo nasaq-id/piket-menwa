@@ -48,9 +48,16 @@ Dikirim ke **semua perangkat yang mengaktifkan notifikasi** (tabel `push_subs`),
   Rincian 34 item tidak memicu push (biar tidak spam).
 - **Pulang / piket selesai** — saat lapsit dikirim ("nama pulang — lapsit: ...").
 
-**Prompt izin di aplikasi terpasang:** saat dibuka sebagai TWA/PWA standalone dan izin notifikasi masih `default`,
-muncul banner **“Nyalakan notifikasi”** di bawah header (tombol **Nyalakan** / **Nanti**). Izin diminta lewat tap user —
-syarat Chrome & iOS; kalau ditunda, banner muncul lagi setelah 7 hari. Di tab browser biasa banner tidak muncul.
+**Prompt izin (berlaku untuk semua pembuka web, terpasang maupun belum):** setelah login, di bawah header muncul banner
+izin yang belum diputuskan —
+- **“Nyalakan notifikasi”** (tombol **Nyalakan** / **Nanti**) kalau browser mendukung Web Push dan izin masih `default`.
+  Di **iPhone yang masih tab Safari** (belum dipasang) izin push belum tersedia, jadi bannernya mengarahkan ke
+  **Cara pasang** (`/unduh/`).
+- **“Aktifkan lokasi”** (tombol **Aktifkan** / **Nanti**) untuk geofence absen mako, dibaca dari Permissions API
+  (`geolocation` state `prompt`); di browser tanpa Permissions API ditanyakan sekali.
+
+Semua izin diminta lewat **tap user** (syarat Chrome & iOS). Tombol **Nanti** menunda banner 7 hari
+(penanda di localStorage: `piket-izin-notif`, `piket-izin-lokasi`).
 
 ### 🏆 Penilaian Otomatis (real-time, tanpa verifikasi manual)
 - **60%** foto bukti • **30%** checklist 34 item • **10%** lapsit → nilai 0–100 + **leaderboard** (khusus superadmin, anggota tidak melihat nilai orang lain).
