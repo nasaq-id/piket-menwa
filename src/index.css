@@ -26,6 +26,14 @@ body { margin:0; background:#070a09; color:var(--ink); font-family: system-ui,-a
 .bell .dot { position:absolute; top:2px; right:2px; width:8px; height:8px; border-radius:99px; background:var(--danger); }
 .offline,.adminbar { font-size:12px; padding:6px 18px; }
 .offline { color:var(--warning); } .adminbar { color:#7dd3fc; }
+/* ---- Banner ajakan menyalakan notifikasi (khusus aplikasi terpasang) ---- */
+.notifbar { display:flex; gap:10px; align-items:center; justify-content:space-between; padding:9px 16px; background:#101d19; border-bottom:1px solid var(--line); }
+.notifbar p { margin:0; font-size:12px; line-height:1.45; color:var(--dim); }
+.notifbar p b { color:var(--ink); font-weight:700; }
+.notifbar .row { display:flex; gap:6px; flex:none; }
+.notifbar button { font:inherit; font-size:12px; font-weight:700; padding:7px 10px; min-height:34px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--dim); cursor:pointer; }
+.notifbar button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+.notifbar button:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
 /* ---- Avatar header + sheet logout ---- */
 .hdavatar { width:42px; height:42px; flex:none; border-radius:99px; border:1.5px solid var(--line); background:var(--card); cursor:pointer; overflow:hidden; display:grid; place-items:center; padding:0; }
 .hdtitle { background:none; border:none; padding:0; cursor:pointer; color:inherit; font:inherit; min-height:44px; }

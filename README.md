@@ -48,6 +48,10 @@ Dikirim ke **semua perangkat yang mengaktifkan notifikasi** (tabel `push_subs`),
   Rincian 34 item tidak memicu push (biar tidak spam).
 - **Pulang / piket selesai** — saat lapsit dikirim ("nama pulang — lapsit: ...").
 
+**Prompt izin di aplikasi terpasang:** saat dibuka sebagai TWA/PWA standalone dan izin notifikasi masih `default`,
+muncul banner **“Nyalakan notifikasi”** di bawah header (tombol **Nyalakan** / **Nanti**). Izin diminta lewat tap user —
+syarat Chrome & iOS; kalau ditunda, banner muncul lagi setelah 7 hari. Di tab browser biasa banner tidak muncul.
+
 ### 🏆 Penilaian Otomatis (real-time, tanpa verifikasi manual)
 - **60%** foto bukti • **30%** checklist 34 item • **10%** lapsit → nilai 0–100 + **leaderboard** (khusus superadmin, anggota tidak melihat nilai orang lain).
 - Master 34 tugas + bobot (total 100) di-seed dari standar; N/A hanya untuk item Kondisional (dikunci di UI + API + CHECK constraint DB).
