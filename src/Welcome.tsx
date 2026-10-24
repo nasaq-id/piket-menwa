@@ -177,12 +177,12 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
     mq.addEventListener('change', ubah);
     return () => mq.removeEventListener('change', ubah);
   }, []);
-  // Tautan pasang aplikasi cuma berguna saat aplikasi dibuka di browser HP
-  // (belum dipasang): Android → APK, iPhone → PWA via "Tambah ke Layar Utama".
-  // Di TWA/PWA standalone disembunyikan (APK tidak bisa diunduh dari dalam app,
-  // dan pengguna iPhone standalone sudah memasangnya). Dihitung sekali saat
-  // render pertama — tidak ada setState di effect.
-  const [tautan] = useState<'apk' | 'ios' | null>(() => {
+  // Tautan ke halaman unduh/pasang aplikasi: tampil untuk SEMUA yang membuka
+  // lewat browser (Android → APK, iPhone → "Tambah ke Layar Utama", desktop →
+  // halaman unduh), dan disembunyikan hanya di TWA/PWA standalone (aplikasi
+  // sudah terpasang; download APK dari dalam app juga tidak jalan).
+  // Dihitung sekali saat render pertama — tidak ada setState di effect.
+  const [tautan] = useState<'apk' | 'ios' | 'web' | null>(() => {
     if (typeof navigator === 'undefined') return null;
     const ua = navigator.userAgent;
     const android = /Android/i.test(ua);
@@ -193,7 +193,7 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
       || (navigator as unknown as { standalone?: boolean }).standalone === true; // iOS home-screen
     const twa = typeof document !== 'undefined' && document.referrer.startsWith('android-app://');
     if (standalone || twa) return null;
-    return android ? 'apk' : ios ? 'ios' : null;
+    return android ? 'apk' : ios ? 'ios' : 'web';
   });
   // Placeholder mengetik satu contoh bergantian (tanpa awalan "contoh:"),
   // berhenti saat field sudah berisi — sama gaya dengan field nama wizard.
@@ -300,11 +300,19 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
         <motion.p className="whint" {...fade(0.32)}>
           Belum punya akun? <button className="wlink" onClick={onRegister}>Daftar</button>
         </motion.p>
-        {tautan && (
+        {tautan === 'apk' && (
           <motion.p className="whint" {...fade(0.36)}>
-            {tautan === 'apk'
-              ? <>Pakai Android? <a className="wlink" href="/unduh/">Unduh APK</a></>
-              : <>Pakai iPhone? <a className="wlink" href="/unduh/">Pasang di Layar Utama</a></>}
+            Pakai Android? <a className="wlink" href="/unduh/">Unduh APK</a>
+          </motion.p>
+        )}
+        {tautan === 'ios' && (
+          <motion.p className="whint" {...fade(0.36)}>
+            Pakai iPhone? <a className="wlink" href="/unduh/">Pasang di Layar Utama</a>
+          </motion.p>
+        )}
+        {tautan === 'web' && (
+          <motion.p className="whint" {...fade(0.36)}>
+            Butuh aplikasi di HP? <a className="wlink" href="/unduh/">Unduh / pasang</a>
           </motion.p>
         )}
         <motion.p

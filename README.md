@@ -209,6 +209,8 @@ membuat proyek Android-nya (hasil generate & manifest asli di-gitignore).
   Manifest `display: standalone`, `apple-touch-icon` 180×180, dan meta `apple-mobile-web-app-*` sudah disiapkan; kamera/QR jalan lewat
   `playsInline` + fallback jsQR. Notifikasi web di iOS baru aktif pada **iOS 16.4+** dan **setelah dipasang** ke Layar Utama.
   Halaman `/unduh/` mendeteksi perangkat: Android dapat tombol APK, iPhone dapat langkah "Tambah ke Layar Utama".
+  Footer login menampilkan tautan ke `/unduh/` untuk **semua yang membuka lewat browser** (Android/iPhone/desktop),
+  dan menyembunyikannya hanya saat aplikasi berjalan standalone/TWA.
 
 **Halaman unduh `/unduh/`:** dilayani nginx VPS publik dari `/var/www/piket-menwa-unduh/` (halaman HTML + berkas
 `piket-menwa.apk`). Isinya tombol unduh, QR, cara pasang, versi/ukuran, dan SHA-256 APK. Template di repo sengaja tanpa
