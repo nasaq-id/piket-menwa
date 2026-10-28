@@ -6,6 +6,7 @@ const tabTitle: Record<Tab, string> = {
   hari: 'Hari Ini',
   minggu: 'Jadwal Mingguan',
   tukar: 'Tukar Jadwal',
+  laporan: 'Laporan Piket',
 };
 
 export function AppHeader({ tab, membersCount, offline, admin, bellDot, onTitleTap, onGear, onBell, avatar, onAvatar }: {

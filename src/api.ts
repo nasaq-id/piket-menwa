@@ -651,6 +651,21 @@ export async function uploadEvidence(
 }
 
 // ---- lapsit akhir piket ----
+// Laporan bukti piket per bulan (mode admin): ringkasan angka per hari per petugas.
+export interface Laporan {
+  bulan: string; today: string;
+  days: {
+    tanggal: string;
+    petugas: {
+      memberId: string; terjadwal: boolean; foto: number; fotoMax: number;
+      ceklis: number; ceklisMax: number; lapsit: boolean; nilai: number;
+    }[];
+  }[];
+}
+export async function loadLaporan(bulan: string): Promise<Laporan | null> {
+  return getAuthed<Laporan>(`/api/laporan?bulan=${bulan}`);
+}
+
 export interface LapsitRow {
   id: number; tanggal: string; memberId: string; catatan: string;
   lat: string | null; lng: string | null; acc: number | null; createdAt: number;

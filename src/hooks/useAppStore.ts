@@ -16,7 +16,7 @@ import { captureQrFromUrl, clearSavedQr, getSavedQr, saveQr } from '../qr';
 import { angkatanFromNbp, profileSchema, type Profile } from '../Welcome';
 import { DAY_ABBR, DAYS, dateStr, load, pinSalahMsg, save, memberById, todayKeyID, tomorrowKeyID, type DayKey } from '../piket';
 
-export type Tab = 'hari' | 'minggu' | 'tukar';
+export type Tab = 'hari' | 'minggu' | 'tukar' | 'laporan'; // laporan = mode admin saja
 
 export interface PreviewState { file: string; judul: string; by: string; tanggal: string }
 
@@ -171,6 +171,8 @@ export function useAppStore() {
   const [hash, setHash] = useState(() => location.hash);
   const [, setTitleTaps] = useState(0);
   const [admin, setAdmin] = useState(() => sessionStorage.getItem('piket-admin') === '1');
+  // Tab Laporan hanya untuk mode admin — keluar mode admin → balik ke Hari Ini.
+  useEffect(() => { if (!admin && tab === 'laporan') setTab('hari'); }, [admin, tab]);
   const [showPin, setShowPin] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [online, setOnline] = useState(navigator.onLine);

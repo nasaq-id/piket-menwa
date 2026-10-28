@@ -1,5 +1,5 @@
 import cors from 'cors';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import express from 'express';
 import fs from 'node:fs';
 import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto';
@@ -1585,6 +1585,46 @@ app.get('/api/nilai/leaderboard', requireSuper, (req, res) => {
     }))
     .sort((a, b) => (b.rata2 ?? -1) - (a.rata2 ?? -1));
   res.json({ rows });
+});
+
+// ---- Laporan bukti piket per bulan (MODE ADMIN) ----
+// Ringkasan per hari per petugas TANPA foto (untuk kalender); foto & lapsit
+// dimuat terpisah saat satu tanggal diketuk. Petugas = jadwal efektif hari
+// itu + siapa pun yang kirim bukti/lapsit (mis. jadwal berubah belakangan).
+app.get('/api/laporan', requireAdmin, (req, res) => {
+  const bulan = String(req.query.bulan ?? '');
+  if (!/^\d{4}-\d{2}$/.test(bulan)) return void res.status(400).json({ error: 'bulan invalid (YYYY-MM)' });
+  const [y, m] = bulan.split('-').map(Number);
+  const jmlHari = new Date(y, m, 0).getDate();
+  const awal = `${bulan}-01`;
+  const akhir = `${bulan}-${String(jmlHari).padStart(2, '0')}`;
+  const kirim = [
+    ...db.select({ tanggal: evidence.tanggal, memberId: evidence.memberId }).from(evidence)
+      .where(and(gte(evidence.tanggal, awal), lte(evidence.tanggal, akhir))).all(),
+    ...db.select({ tanggal: lapsit.tanggal, memberId: lapsit.memberId }).from(lapsit)
+      .where(and(gte(lapsit.tanggal, awal), lte(lapsit.tanggal, akhir))).all(),
+  ];
+  const days = [];
+  for (let d = 1; d <= jmlHari; d++) {
+    const tanggal = `${bulan}-${String(d).padStart(2, '0')}`;
+    const day = DAYS[dayIndexOf(new Date(tanggal + 'T00:00').getDay())]; // Sabtu/Minggu → undefined
+    const terjadwal = new Set(day ? effectiveRosterDay(day, mondayOf(tanggal)).map((r) => r.memberId) : []);
+    const ids = new Set(terjadwal);
+    for (const k of kirim) if (k.tanggal === tanggal) ids.add(k.memberId);
+    if (ids.size === 0) continue;
+    days.push({
+      tanggal,
+      petugas: [...ids].map((memberId) => {
+        const k = nilaiKomponen(tanggal, memberId);
+        return {
+          memberId, terjadwal: terjadwal.has(memberId),
+          foto: k.foto, fotoMax: k.fotoMax, ceklis: k.rincian, ceklisMax: k.rincianMax,
+          lapsit: k.lapsit, nilai: k.nilai,
+        };
+      }),
+    });
+  }
+  res.json({ bulan, today: todayLocal(), days });
 });
 
 // Nilai hari ini utk 1 member (dipakai kartu "Nilai Piketmu" di HP).

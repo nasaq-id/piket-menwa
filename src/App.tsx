@@ -14,6 +14,7 @@ import { Toast } from './components/Toast';
 import { HariTab } from './tabs/HariTab';
 import { MingguanTab } from './tabs/MingguanTab';
 import { TukarTab } from './tabs/TukarTab';
+import { LaporanTab } from './tabs/LaporanTab';
 import { ProfilePage, WelcomePage } from './Welcome';
 import SuperView from './Super';
 
@@ -145,6 +146,7 @@ export default function App() {
             {tab === 'hari' && <HariTab store={store} />}
             {tab === 'minggu' && <MingguanTab store={store} />}
             {tab === 'tukar' && <TukarTab store={store} />}
+            {tab === 'laporan' && admin && <LaporanTab store={store} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -167,7 +169,7 @@ export default function App() {
         )}
       </AnimatePresence>
       <ConfirmSheet req={store.confirmReq} onResolve={store.resolveConfirm} />
-      <BottomTabs tab={tab} onTab={setTab} pendingCount={pending.length} hidden={navHidden} />
+      <BottomTabs tab={tab} onTab={setTab} pendingCount={pending.length} hidden={navHidden} admin={admin} />
     </div>
   );
 }
