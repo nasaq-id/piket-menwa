@@ -78,7 +78,6 @@ export default function App() {
         offline={!online || state?.fromApi === false}
         admin={admin}
         bellDot={bellDot}
-        onTitleTap={store.titleTap}
         onGear={store.gearClick}
         onBell={store.enableNotif}
         avatar={meMember.foto

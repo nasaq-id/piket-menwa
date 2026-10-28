@@ -9,9 +9,9 @@ const tabTitle: Record<Tab, string> = {
   laporan: 'Laporan Piket',
 };
 
-export function AppHeader({ tab, membersCount, offline, admin, bellDot, onTitleTap, onGear, onBell, avatar, onAvatar }: {
+export function AppHeader({ tab, membersCount, offline, admin, bellDot, onGear, onBell, avatar, onAvatar }: {
   tab: Tab; membersCount: number; offline: boolean; admin: boolean; bellDot: boolean;
-  onTitleTap: () => void; onGear: () => void; onBell: () => void;
+  onGear: () => void; onBell: () => void;
   avatar: ReactNode; onAvatar: () => void;
 }) {
   return (
@@ -22,10 +22,10 @@ export function AppHeader({ tab, membersCount, offline, admin, bellDot, onTitleT
             {avatar}
           </button>
         )}
-        <button type="button" className="hdtitle" onClick={onTitleTap}>
+        <div className="hdtitle">
           <h1>{tabTitle[tab]}</h1>
           <p>Ki Menwa YPKP • {membersCount} anggota{offline ? ' • Offline' : ''}</p>
-        </button>
+        </div>
         <div className="hbtns">
           <button className="iconbtn" onClick={onGear} title="Mode admin" aria-label="Masuk/keluar mode admin"><Settings size={19} /></button>
           <button className="iconbtn bell" onClick={onBell} title="Pengingat H-1" aria-label="Aktifkan notifikasi">

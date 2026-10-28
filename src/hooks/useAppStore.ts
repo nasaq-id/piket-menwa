@@ -169,7 +169,6 @@ export function useAppStore() {
     return r;
   };
   const [hash, setHash] = useState(() => location.hash);
-  const [, setTitleTaps] = useState(0);
   const [admin, setAdmin] = useState(() => sessionStorage.getItem('piket-admin') === '1');
   // Tab Laporan hanya untuk mode admin — keluar mode admin → balik ke Hari Ini.
   useEffect(() => { if (!admin && tab === 'laporan') setTab('hari'); }, [admin, tab]);
@@ -1028,16 +1027,6 @@ export function useAppStore() {
       if (t) clearTimeout(t);
     };
   }, []);
-  // Pintu dev: tap judul 5× → dashboard superadmin.
-  const titleTap = () => {
-    setTitleTaps((n) => {
-      if (n + 1 >= 5) {
-        location.hash = 'super';
-        return 0;
-      }
-      return n + 1;
-    });
-  };
   return {
     tab, setTab, state, checks, ev, uploadingTugas, pendingTugas, photoRef,
     preview, setPreview, weekEv, geo, members, meMember, nama, warna,
@@ -1049,7 +1038,7 @@ export function useAppStore() {
     pendingLoginName: pendingLogin?.nama ?? null,
     submitSwap, decide, cancelSwap, addTo, removeFrom, jamColon, setJam,
     moveWeekMember, saveWeekDrag, resetWeekDrag, clearWeekOverride,
-    gearClick, submitPin, enableNotif, titleTap, hash,
+    gearClick, submitPin, enableNotif, hash,
     admin, showPin, setShowPin, pinInput, setPinInput, pinBusy, online,
     target, setTarget, fromDay, setFromDay, toDay, setToDay, alasan, setAlasan,
     weekOff, setWeekOff, weekStat, expanded, setExpanded, pickDay, setPickDay,

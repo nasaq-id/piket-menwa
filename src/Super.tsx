@@ -220,7 +220,7 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
         <h1>Superadmin</h1>
         <p className="hint">Khusus dev — monitoring seluruh data.</p>
         <input
-          type="password" inputMode="numeric" placeholder="PIN superadmin"
+          type="password" autoComplete="current-password" placeholder="Sandi superadmin"
           value={pin} onChange={(e) => setPin(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void submitPin(); }}
         />
