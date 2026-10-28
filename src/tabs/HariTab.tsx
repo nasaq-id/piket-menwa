@@ -17,7 +17,7 @@ const todayLong = () => {
 export function HariTab({ store }: { store: AppStore }) {
   const {
     today, crew, att, members, nama, warna, jamHari, mySlots, me, unlocked, absenBusy,
-    faceEnabled, needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef, doneCount,
+    faceEnabled, absenEnabled, needVerify, checks, ev, uploadingTugas, taskTap, pickPhoto, photoRef, doneCount,
     pendingTugas, onFile, bdDone, bdOpen, setBdOpen, bdSecOpen, setBdSecOpen,
     nilaiHariIni, lapsit, lapsitText, setLapsitText, kirimLapsit, lapsitOpen,
     lapsitOpenAt, jamSelesaiHariIni, tmr, crewBesok, state, setPreview,
@@ -33,7 +33,7 @@ export function HariTab({ store }: { store: AppStore }) {
   const buktiLengkap = checks.length > 0 && ev.length >= checks.length;
   const active: StepId | null = !isPetugas
     ? null
-    : !unlocked ? 'absen' : !buktiLengkap ? 'bukti' : !lapsitSent ? 'lapsit' : null;
+    : absenEnabled && !unlocked ? 'absen' : !buktiLengkap ? 'bukti' : !lapsitSent ? 'lapsit' : null;
 
   // Accordion bukti otomatis terbuka saat langkah aktif = Bukti.
   useEffect(() => {
@@ -75,9 +75,11 @@ export function HariTab({ store }: { store: AppStore }) {
                     : <i style={{ background: warna(id) }} />}
                   <span>{nama(id)}</span>
                   {m && isOnline(m) && <i className="onlinedot" title="online" />}
-                  <em className={row ? (row.status === 'terlambat' ? 'badge-no late' : 'badge-ok') : 'badge-no'}>
-                    {row ? `${row.status === 'terlambat' ? 'terlambat' : 'hadir'} ${row.jam}` : 'belum'}
-                  </em>
+                  {absenEnabled && (
+                    <em className={row ? (row.status === 'terlambat' ? 'badge-no late' : 'badge-ok') : 'badge-no'}>
+                      {row ? `${row.status === 'terlambat' ? 'terlambat' : 'hadir'} ${row.jam}` : 'belum'}
+                    </em>
+                  )}
                 </div>
               );
             })}
@@ -90,12 +92,12 @@ export function HariTab({ store }: { store: AppStore }) {
           active={active}
           onGo={goStep}
           steps={[
-            {
-              id: 'absen',
+            ...(absenEnabled ? [{
+              id: 'absen' as const,
               label: 'Absen',
               sub: unlocked && myAtt ? `${myAtt.jam}${myAtt.status === 'terlambat' ? '\nterlambat' : ''}` : faceEnabled ? 'scan wajah' : 'scan QR',
               done: unlocked,
-            },
+            }] : []),
             { id: 'bukti', label: 'Bukti', sub: `${ev.length}/${checks.length}`, done: buktiLengkap },
             {
               id: 'lapsit',
@@ -111,7 +113,7 @@ export function HariTab({ store }: { store: AppStore }) {
           {mySlots.length === 0 && (
             <p className="hint">Kamu belum terdaftar sebagai petugas piket minggu ini — minta admin tambahkan via tab Mingguan (mode admin).</p>
           )}
-          <div id="sec-absen" className="anchor">
+          {absenEnabled && <div id="sec-absen" className="anchor">
           <AnimatePresence mode="wait" initial={false}>
             {crew.includes(me) && !unlocked && (
               <motion.div
@@ -147,7 +149,7 @@ export function HariTab({ store }: { store: AppStore }) {
               </motion.p>
             )}
           </AnimatePresence>
-          </div>
+          </div>}
           <div className="bdgroup anchor" id="sec-bukti">
             <button className="bdhead" onClick={() => setBuktiOpen((o) => !o)} aria-expanded={buktiOpen}>
               <span>Bukti piket · wajib</span>

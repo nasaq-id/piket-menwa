@@ -9,7 +9,7 @@ import {
  * belum: notifikasi (atau arahan pasang di iPhone tab Safari) + lokasi untuk
  * geofence absen. Izin selalu diminta dari tap user (syarat Chrome/iOS).
  */
-export function IzinPrompt({ onEnableNotif }: { onEnableNotif: () => Promise<void> }) {
+export function IzinPrompt({ onEnableNotif, absenEnabled }: { onEnableNotif: () => Promise<void>; absenEnabled: boolean }) {
   const [sembunyiNotif, setSembunyiNotif] = useState(false);
   const [sembunyiLokasi, setSembunyiLokasi] = useState(false);
   const [lokasi, setLokasi] = useState<IzinLokasi>('checking');
@@ -77,7 +77,7 @@ export function IzinPrompt({ onEnableNotif }: { onEnableNotif: () => Promise<voi
 
       {tampilLokasi && (
         <div className="notifbar" role="region" aria-label="Aktifkan lokasi">
-          <p><b>Aktifkan lokasi</b> — dipakai untuk memastikan absen dilakukan di area mako (geofence).</p>
+          <p><b>Aktifkan lokasi</b> — {absenEnabled ? 'dipakai untuk memastikan absen dilakukan di area mako (geofence).' : 'dipakai untuk mencantumkan lokasi di foto bukti piket.'}</p>
           <div className="row">
             <button type="button" onClick={nantiLokasi}>Nanti</button>
             <button type="button" className="primary" onClick={aktifkanLokasi}>Aktifkan</button>

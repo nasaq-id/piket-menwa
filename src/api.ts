@@ -213,12 +213,13 @@ export interface AppState {
   swaps: SwapRow[];
   templateLen: number; // jumlah tugas master (dipakai buat hitung X/Y bukti)
   faceEnabled: boolean; // false = login PIN + absen QR mako (verifikasi wajah dimatikan server)
+  absenEnabled: boolean; // false = tanpa absensi: bukti/ceklis/lapsit langsung terbuka
 }
 
 export async function loadState(): Promise<AppState> {
   const s = await get<{
     members: Member[]; roster: RosterRow[];
-    swaps: SwapRow[]; template: TaskRow[]; config?: { faceEnabled?: boolean };
+    swaps: SwapRow[]; template: TaskRow[]; config?: { faceEnabled?: boolean; absenEnabled?: boolean };
   }>('/api/state');
   if (s) {
     const schedule = { ...DEFAULT_SCHEDULE } as Record<DayKey, string[]>;
@@ -229,7 +230,7 @@ export async function loadState(): Promise<AppState> {
       jam[r.day] = `${r.jamMulai}–${r.jamSelesai}`;
     }
     save('piket-members', s.members);
-    return { fromApi: true, members: s.members, schedule, jam, swaps: s.swaps as SwapRow[], templateLen: s.template.length, faceEnabled: s.config?.faceEnabled === true };
+    return { fromApi: true, members: s.members, schedule, jam, swaps: s.swaps as SwapRow[], templateLen: s.template.length, faceEnabled: s.config?.faceEnabled === true, absenEnabled: s.config?.absenEnabled === true };
   }
   // offline fallback (anggota = cache terakhir, bisa kosong)
   const schedule = load('piket-schedule', DEFAULT_SCHEDULE);
@@ -238,7 +239,7 @@ export async function loadState(): Promise<AppState> {
     fromApi: false,
     members: load<Member[]>('piket-members', []),
     schedule, jam: Object.fromEntries(Object.keys(schedule).map((d) => [d, '09.00–15.00'])) as Record<DayKey, string>,
-    swaps, templateLen: DEFAULT_TASKS.length, faceEnabled: false,
+    swaps, templateLen: DEFAULT_TASKS.length, faceEnabled: false, absenEnabled: false,
   };
 }
 

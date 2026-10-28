@@ -26,6 +26,8 @@ export function useAppStore() {
   const [state, setState] = useState<AppState | null>(null);
   // false = verifikasi wajah dimatikan server: login PIN, absen QR mako + geofence.
   const faceEnabled = state?.faceEnabled ?? false;
+  // false = absensi dinonaktifkan server: bukti/ceklis/lapsit langsung terbuka setelah login.
+  const absenEnabled = state?.absenEnabled ?? false;
   const [qrOpen, setQrOpen] = useState(false);
   const [regBusy, setRegBusy] = useState(false);
   const [checks, setChecks] = useState<TaskRow[]>([]);
@@ -191,10 +193,15 @@ export function useAppStore() {
   const [dragSaving, setDragSaving] = useState(false);
 
   useEffect(() => { save('piket-me', me); }, [me]);
+  // QR mako discan pakai kamera bawaan HP → URL ?absen=<token> → simpan untuk absen.
+  // Pesan baru ditampilkan setelah config server terbaca (absensi bisa dinonaktifkan).
+  const qrDariUrl = useRef(false);
+  useEffect(() => { qrDariUrl.current = captureQrFromUrl(); }, []);
   useEffect(() => {
-    // QR mako discan pakai kamera bawaan HP → URL ?absen=<token> → simpan untuk absen.
-    if (captureQrFromUrl()) setToast({ msg: 'QR mako terbaca — masuk, lalu tekan Absen.', kind: 'info' });
-  }, []);
+    if (!state || !qrDariUrl.current) return;
+    qrDariUrl.current = false;
+    if (state.absenEnabled) setToast({ msg: 'QR mako terbaca — masuk, lalu tekan Absen.', kind: 'info' });
+  }, [state]);
   useEffect(() => {
     try {
       if (me) localStorage.setItem('piket-me-date', dateStr(0));
@@ -263,7 +270,8 @@ export function useAppStore() {
 
   // Checklist/bukti/lapsit terbuka = sudah absen hari ini (sumber: data server,
   // bukan sesi browser → aman ganti HP / refresh; server juga menegakkan ini).
-  const unlocked = !!me && att.some((a) => a.memberId === me && a.tanggal === dateStr(0));
+  // Absensi dinonaktifkan → cukup login.
+  const unlocked = !!me && (!absenEnabled || att.some((a) => a.memberId === me && a.tanggal === dateStr(0)));
 
   const members: Member[] = useMemo(
     () => state?.members ?? [], [state],
@@ -1045,7 +1053,7 @@ export function useAppStore() {
     weekOff, setWeekOff, weekStat, expanded, setExpanded, pickDay, setPickDay,
     weekLoading, dragSchedule, dragDirty, dragSaving, weekOverridden,
     me, setMe, faces, att, unlocked, absenBusy, cam, setCam,
-    faceEnabled, qrOpen, setQrOpen, submitQr, regBusy,
+    faceEnabled, absenEnabled, qrOpen, setQrOpen, submitQr, regBusy,
     toast, setToast, profiling, setProfiling,
     navHidden, showLogout, setShowLogout, secretType, setSecretType, secretNew, setSecretNew, secretMsg, setSecretMsg, saveSecret,
     showKontak, setShowKontak, saveKontak,

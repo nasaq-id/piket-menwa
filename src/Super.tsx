@@ -543,8 +543,9 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
           {tab === 'pengaturan' && (
             <>
               <h2>Pengaturan absen</h2>
-              <MakoPanel />
-              <QrPanel ask={ask} faceEnabled={state?.faceEnabled ?? false} />
+              {state?.absenEnabled
+                ? <><MakoPanel /><QrPanel ask={ask} faceEnabled={state?.faceEnabled ?? false} /></>
+                : <Empty text="Absensi piket sedang dinonaktifkan — petugas cukup upload bukti foto, ceklis & lapsit." />}
             </>
           )}
         </motion.div>

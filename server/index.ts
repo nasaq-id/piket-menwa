@@ -60,6 +60,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // ±2 GB. Nyalakan dengan FACE_ENABLED=true (+ jalankan CompreFace) kalau server cukup.
 // Mati → login & daftar cukup NBP/WA + PIN, absen = QR mako + geofence.
 const FACE_ENABLED = process.env.FACE_ENABLED === 'true';
+// Absensi piket (scan QR/wajah di mako) DIMATIKAN secara default — petugas cukup
+// upload bukti foto + ceklis + lapsit. Nyalakan lagi dengan ABSEN_ENABLED=true.
+const ABSEN_ENABLED = process.env.ABSEN_ENABLED === 'true';
 const needEnv = (name: string, devFallback: string): string => {
   const v = process.env[name];
   if (v) return v;
@@ -302,7 +305,7 @@ app.get('/api/state', (_req, res) => {
     roster: db.select().from(roster).all(),
     template: db.select().from(tasks).where(eq(tasks.tanggal, 'template')).all(),
     swaps: db.select().from(swaps).all().sort((a, b) => b.createdAt - a.createdAt),
-    config: { faceEnabled: FACE_ENABLED },
+    config: { faceEnabled: FACE_ENABLED, absenEnabled: ABSEN_ENABLED },
   });
 });
 
@@ -1288,6 +1291,7 @@ const qrOk = (given: unknown): boolean => {
 };
 
 app.post('/api/attendance', rateLimit(20, 60_000), async (req, res) => {
+  if (!ABSEN_ENABLED) return void res.status(404).json({ error: 'Absensi piket sedang dinonaktifkan.' });
   const { tanggal, memberId, attest, geo: geoIn, qr } = (req.body ?? {}) as {
     tanggal: string; memberId: string; attest?: string; geo?: unknown; qr?: unknown;
   };
@@ -1378,7 +1382,7 @@ app.post('/api/evidence', (req, res) => {
   }
   const onDuty = onDutyAt(tanggal, memberId);
   if (!onDuty) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
-  if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
+  if (ABSEN_ENABLED && !hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   const task = ensureChecks(tanggal, memberId).find((t) => t.judul === tugas);
   const master = !task
     ? db.select().from(tugasMaster).where(eq(tugasMaster.judul, tugas)).all()[0]
@@ -1448,7 +1452,7 @@ app.post('/api/lapsit', (req, res) => {
     return void res.status(403).json({ error: 'verifikasi wajah/PIN dulu hari ini' });
   }
   if (!onDutyAt(tanggal, memberId)) return void res.status(400).json({ error: `${member.nama} tidak piket di tanggal itu` });
-  if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
+  if (ABSEN_ENABLED && !hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   // Lapsit cuma boleh dikirim maks 30 menit SEBELUM jam selesai piket
   // (jam diatur admin di jadwal, ikut override minggu berjalan kalau ada).
   // Cek hanya berlaku utk tanggal HARI INI — laporan tanggal lampau (yg
@@ -1512,10 +1516,10 @@ app.post('/api/breakdown', (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal ?? '')) return void res.status(400).json({ error: 'tanggal invalid' });
   const member = db.select({ id: members.id }).from(members).where(eq(members.id, memberId)).all()[0];
   if (!member) return void res.status(400).json({ error: 'anggota invalid' });
-  // Rincian tugas ikut menentukan nilai (30%) → wajib login + sudah absen, cuma utk diri sendiri.
+  // Rincian tugas ikut menentukan nilai (30%) → wajib login (+ absen bila ABSEN_ENABLED), cuma utk diri sendiri.
   if (!checkAttest(attest, memberId, tanggal)) return void res.status(403).json({ error: 'Login dulu hari ini.' });
   if (!onDutyAt(tanggal, memberId)) return void res.status(400).json({ error: 'tidak piket di tanggal itu' });
-  if (!hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
+  if (ABSEN_ENABLED && !hasAttended(tanggal, memberId)) return void res.status(403).json({ error: 'Absen (scan wajah di mako) dulu.' });
   if (!/^\d+:\d+$/.test(itemKey ?? '')) return void res.status(400).json({ error: 'itemKey invalid' });
   const existing = db.select().from(breakdown)
     .where(and(eq(breakdown.tanggal, tanggal), eq(breakdown.memberId, memberId), eq(breakdown.itemKey, itemKey))).all()[0];
@@ -1722,6 +1726,7 @@ setInterval(() => {
 // masuk dan belum absen → broadcast sekali per anggota, selama jam piket masih
 // berjalan (biar tidak menembak saat server restart setelah piket selesai).
 const pushTelatSekali = async () => {
+  if (!ABSEN_ENABLED) return;
   const tanggal = todayLocal();
   const now = new Date();
   const day = DAYS[dayIndexOf(new Date(tanggal + 'T00:00').getDay())];

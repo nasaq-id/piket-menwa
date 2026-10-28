@@ -149,10 +149,11 @@ const saveLoginPref = (m: 'face' | 'manual') => {
 // Contoh dummy untuk placeholder login (BUKAN data nyata), tampil bergantian.
 const LOGIN_CONTOH = ['1494.08.10001', '081234567890', 'rajawali'];
 const LOGIN_STATIS = 'NBP, No. WA, atau alias';
-export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
+export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled, absenEnabled }: {
   onLogin: (ident: string, secret: string) => Promise<{ ok: boolean; error?: string }>;
   onFaceLogin: () => void; onRegister: () => void;
   faceEnabled: boolean; // false = hanya login NBP/WA + PIN (verifikasi wajah dimatikan server)
+  absenEnabled: boolean; // false = tanpa absensi → tidak ada info scan QR mako
 }) {
   // Slot logo: taruh file di public/brand/logo-menwa.png → otomatis kepakai.
   // Belum ada file = fallback ikon Shield.
@@ -321,7 +322,7 @@ export function WelcomePage({ onLogin, onFaceLogin, onRegister, faceEnabled }: {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.35, delay: 0.4 }}
         >
-          {faceEnabled ? 'Foto wajah dipakai untuk login & absen. Foto tidak disimpan.' : 'Absen piket: scan QR yang ditempel di mako.'}
+          {faceEnabled ? 'Foto wajah dipakai untuk login & absen. Foto tidak disimpan.' : absenEnabled ? 'Absen piket: scan QR yang ditempel di mako.' : 'Petugas piket: upload bukti foto, ceklis & lapsit.'}
         </motion.p>
       </footer>
     </motion.div>

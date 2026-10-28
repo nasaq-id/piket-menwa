@@ -59,7 +59,7 @@ export default function App() {
       <div className="phone tac">
         {profiling
           ? <ProfilePage onDone={store.onProfileDone} onCancel={() => store.setProfiling(false)} names={members.map((m) => m.nama)} existing={members.map((m) => ({ nama: m.nama, angkatan: m.angkatan }))} scanning={cam?.mode === 'register'} faceEnabled={store.faceEnabled} busyRegister={store.regBusy} />
-          : <WelcomePage onLogin={store.credLogin} onFaceLogin={store.faceLogin} onRegister={() => store.setProfiling(true)} faceEnabled={store.faceEnabled} />}
+          : <WelcomePage onLogin={store.credLogin} onFaceLogin={store.faceLogin} onRegister={() => store.setProfiling(true)} faceEnabled={store.faceEnabled} absenEnabled={store.absenEnabled} />}
         <AnimatePresence>{camModal}</AnimatePresence>
         <AnimatePresence>
           {toast && <Toast t={toast} onClose={() => store.setToast(null)} />}
@@ -85,7 +85,7 @@ export default function App() {
           : <i className="pdot" style={{ background: meMember.warna }} />}
         onAvatar={() => store.setShowLogout(true)}
       />
-      <IzinPrompt onEnableNotif={store.enableNotif} />
+      <IzinPrompt onEnableNotif={store.enableNotif} absenEnabled={store.absenEnabled} />
       <AnimatePresence>
         {showPin && (
           <PinSheet
