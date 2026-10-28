@@ -729,7 +729,7 @@ export async function loadNilaiToday(date: string, memberId: string): Promise<nu
 // ---- Link pemantau (senior/alumni): laporan hanya-lihat tanpa login ----
 export type LaporanPantau = Omit<Laporan, 'days'> & {
   days: { tanggal: string; petugas: Omit<Laporan['days'][number]['petugas'][number], 'nilai'>[] }[];
-  members: Pick<Member, 'id' | 'nama' | 'warna' | 'foto'>[];
+  members: Pick<Member, 'id' | 'nama' | 'warna' | 'foto' | 'jabatan'>[];
 };
 export async function loadPantauLaporan(token: string, bulan: string): Promise<LaporanPantau | 'mati' | null> {
   try {

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Camera, ChevronLeft, ChevronRight, ClipboardList, FileText } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadEvidence, loadLaporan, loadLapsit, type EvidenceRow, type Laporan, type LapsitRow, type Member } from '../api';
 import { Empty } from '../components/Empty';
@@ -15,11 +15,11 @@ export type HariData = {
   evidence: Pick<EvidenceRow, 'id' | 'tugas' | 'memberId' | 'file'>[];
   lapsit: Pick<LapsitRow, 'memberId' | 'catatan'>[];
 };
-type Anggota = Pick<Member, 'id' | 'nama' | 'warna' | 'foto'>;
+type Anggota = Pick<Member, 'id' | 'nama' | 'warna' | 'foto'> & { jabatan?: string | null };
 
 const HARI = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-const LABEL: Record<Status, string> = { lengkap: 'lengkap', sebagian: 'sebagian', kosong: 'kosong', nanti: 'belum lewat' };
+const LABEL: Record<Status, string> = { lengkap: 'Lengkap', sebagian: 'Sebagian', kosong: 'Kosong', nanti: 'Terjadwal' };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const geserBulan = (bulan: string, n: number) => {
@@ -28,7 +28,10 @@ const geserBulan = (bulan: string, n: number) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 };
 const tglPanjang = (t: string) =>
-  new Date(t + 'T00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' });
+  new Date(t + 'T00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const pct = (n: number, max: number) => (max > 0 ? Math.min(100, Math.round((n / max) * 100)) : 0);
+const statusPetugas = (p: Petugas) => (lengkap(p) ? 'lengkap' : kosong(p) ? 'kosong' : 'sebagian');
+const LABEL_PETUGAS = { lengkap: 'Lengkap', sebagian: 'Belum lengkap', kosong: 'Belum ada laporan' } as const;
 
 const lengkap = (p: Petugas) => p.foto >= p.fotoMax && p.lapsit;
 const kosong = (p: Petugas) => p.foto === 0 && p.ceklis === 0 && !p.lapsit;
@@ -51,7 +54,7 @@ export function LaporanTab({ store }: { store: AppStore }) {
       }}
       onPreview={store.setPreview}
       tampilNilai
-      pesanGagal="Gagal memuat laporan — pastikan online & mode admin aktif."
+      pesanGagal="Laporan gagal dimuat. Periksa koneksi dan pastikan mode admin aktif."
     />
   );
 }
@@ -127,107 +130,149 @@ export function LaporanView({ members, muatBulan, muatHari, onPreview, tampilNil
     ...Array.from({ length: jmlHari }, (_, i) => `${bulan}-${pad(i + 1)}`),
   ];
 
-  const rekap = { lengkap: 0, sebagian: 0, kosong: 0 };
+  const rekap = { lengkap: 0, sebagian: 0, kosong: 0, nanti: 0 };
   for (const [t, ps] of hariMap) {
-    const s = statusHari(t, today, ps);
-    if (s !== 'nanti') rekap[s]++;
+    rekap[statusHari(t, today, ps)]++;
   }
 
   const detail = pilih ? hariMap.get(pilih) ?? [] : [];
 
   return (
-    <>
-      <div className="lapbar">
-        <button type="button" className="iconbtn" onClick={() => setBulan(geserBulan(bulan, -1))} aria-label="Bulan sebelumnya"><ChevronLeft size={20} /></button>
-        <b>{BULAN[mo - 1]} {y}</b>
-        <button type="button" className="iconbtn" onClick={() => setBulan(geserBulan(bulan, 1))} aria-label="Bulan berikutnya"><ChevronRight size={20} /></button>
+    <div className="lap">
+      <div className="lap-head">
+        <div>
+          <span className="lap-eyebrow">Laporan bukti piket</span>
+          <h2 className="lap-title">{BULAN[mo - 1]} {y}</h2>
+        </div>
+        <div className="lap-nav">
+          <button type="button" onClick={() => setBulan(geserBulan(bulan, -1))} aria-label="Bulan sebelumnya"><ChevronLeft size={18} /></button>
+          <button type="button" onClick={() => setBulan(geserBulan(bulan, 1))} aria-label="Bulan berikutnya"><ChevronRight size={18} /></button>
+        </div>
       </div>
-      <select className="lapsiapa" value={siapa} onChange={(e) => setSiapa(e.target.value)} aria-label="Filter anggota">
+
+      <select className="lap-filter" value={siapa} onChange={(e) => setSiapa(e.target.value)} aria-label="Filter anggota">
         <option value="">Semua anggota</option>
         {members.map((m) => <option key={m.id} value={m.id}>{m.nama}</option>)}
       </select>
 
+      <div className="lap-sum">
+        {(['lengkap', 'sebagian', 'kosong', 'nanti'] as const).map((k) => (
+          <div key={k} className={`lap-sumitem st-${k}`}>
+            <b>{data ? rekap[k] : '–'}</b>
+            <span>{LABEL[k]}</span>
+          </div>
+        ))}
+      </div>
+
       {gagal && <Empty text={pesanGagal} />}
 
-      <div className="lapcal" role="grid" aria-label={`Kalender laporan ${BULAN[mo - 1]} ${y}`}>
-        {HARI.map((h) => <span key={h} className="laphead">{h}</span>)}
+      <div className="lap-cal" role="grid" aria-label={`Kalender laporan ${BULAN[mo - 1]} ${y}`}>
+        {HARI.map((h) => <span key={h} className="lap-wd">{h}</span>)}
         {sel.map((t, i) => {
           if (!t) return <span key={`k${i}`} />;
           const ps = hariMap.get(t);
           const st = ps ? statusHari(t, today, ps) : null;
-          const n = Number(t.slice(8));
           return (
             <button
               key={t} type="button" disabled={!ps}
-              className={`lapday${st ? ` st-${st}` : ''}${pilih === t ? ' on' : ''}${t === today ? ' today' : ''}`}
+              className={`lap-day${st ? ` st-${st}` : ''}${pilih === t ? ' on' : ''}${t === today ? ' today' : ''}`}
               onClick={() => setPilih(t)}
               aria-label={`${tglPanjang(t)}${st ? `, ${LABEL[st]}` : ', tidak ada piket'}`}
+              aria-pressed={pilih === t}
             >
-              <span>{n}</span>
-              {st && <i aria-hidden="true" />}
+              <span>{Number(t.slice(8))}</span>
             </button>
           );
         })}
       </div>
 
-      <div className="laplegend" aria-hidden="true">
-        <span><i className="st-lengkap" />lengkap {rekap.lengkap}</span>
-        <span><i className="st-sebagian" />sebagian {rekap.sebagian}</span>
-        <span><i className="st-kosong" />kosong {rekap.kosong}</span>
-        <span><i className="st-nanti" />belum lewat</span>
-      </div>
-
       <AnimatePresence mode="wait" initial={false}>
         {pilih && (
           <motion.section
-            key={pilih} className="lapdetail"
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            key={pilih} className="lap-detail"
+            initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
           >
-            <h2>{tglPanjang(pilih)}</h2>
-            {detail.length === 0 && <Empty text="Tidak ada piket di tanggal ini." />}
+            <div className="lap-dhead">
+              <span className="lap-eyebrow">Rincian harian</span>
+              <h3>{tglPanjang(pilih)}</h3>
+            </div>
+            {detail.length === 0 && <Empty text="Tidak ada jadwal piket pada tanggal ini." />}
             {detail.map((p) => {
               const m = members.find((x) => x.id === p.memberId);
               const fotoSaya = (ev ?? []).filter((e) => e.memberId === p.memberId);
               const lap = laps.find((l) => l.memberId === p.memberId);
+              const sp = statusPetugas(p);
               return (
-                <div key={p.memberId} className="lapcard">
-                  <div className="lapcardhead">
-                    {m?.foto ? <img className="ava" src={m.foto} alt="" /> : <i className="pdot" style={{ background: m?.warna ?? '#888' }} />}
-                    <b>{nama(p.memberId)}</b>
-                    {!p.terjadwal && <em className="pill sm">di luar jadwal</em>}
-                    {tampilNilai && p.nilai !== undefined && <span className="lapnilai">nilai {Math.round(p.nilai)}</span>}
-                  </div>
-                  <div className="lapfoto">
+                <article key={p.memberId} className="lap-card">
+                  <header className="lap-chead">
+                    {m?.foto
+                      ? <img className="lap-ava" src={m.foto} alt="" />
+                      : <span className="lap-ava lap-ini" style={{ background: m?.warna ?? '#556' }}>{nama(p.memberId).slice(0, 1)}</span>}
+                    <div className="lap-who">
+                      <b>{nama(p.memberId)}</b>
+                      <span>{[m?.jabatan, !p.terjadwal && 'Di luar jadwal'].filter(Boolean).join(' · ') || 'Petugas piket'}</span>
+                    </div>
+                    <span className={`lap-badge st-${sp}`}>{LABEL_PETUGAS[sp]}</span>
+                  </header>
+
+                  <div className="lap-photos">
                     {ev === null
-                      ? <span className="hint">Memuat foto…</span>
+                      ? Array.from({ length: p.fotoMax }, (_, i) => <span key={i} className="lap-ph lap-skel" />)
                       : Array.from({ length: Math.max(p.fotoMax, fotoSaya.length) }, (_, i) => {
                         const f = fotoSaya[i];
                         return f
                           ? (
                             <button
-                              key={f.id} type="button" className="thumbbtn"
+                              key={f.id} type="button" className="lap-ph"
                               onClick={() => onPreview({ file: f.file, judul: f.tugas, by: nama(p.memberId), tanggal: pilih })}
                               aria-label={`Lihat foto ${f.tugas}`}
                             >
-                              <img src={f.file} alt={f.tugas} />
+                              <img src={f.file} alt={f.tugas} loading="lazy" />
+                              <span className="lap-cap">{f.tugas}</span>
                             </button>
                           )
-                          : <span key={`x${i}`} className="lapkosong" aria-label="foto belum ada"><Camera size={16} /></span>;
+                          : <span key={`x${i}`} className="lap-ph lap-none"><ImageOff size={16} /><span>Belum diunggah</span></span>;
                       })}
                   </div>
-                  <p className="lapstat">
-                    <span className={p.foto >= p.fotoMax ? 'ok' : ''}><Camera size={13} /> Foto {p.foto}/{p.fotoMax}</span>
-                    <span className={p.ceklis >= p.ceklisMax ? 'ok' : ''}><ClipboardList size={13} /> Ceklis {p.ceklis}/{p.ceklisMax}</span>
-                    <span className={p.lapsit ? 'ok' : ''}><FileText size={13} /> Lapsit {p.lapsit ? '✓' : 'belum'}</span>
-                  </p>
-                  {lap && <p className="laplapsit">“{lap.catatan}”</p>}
-                </div>
+
+                  <dl className="lap-metrics">
+                    <div>
+                      <dt>Foto bukti</dt>
+                      <dd>{p.foto}/{p.fotoMax}</dd>
+                      <i className="lap-bar"><i style={{ width: `${pct(p.foto, p.fotoMax)}%` }} /></i>
+                    </div>
+                    <div>
+                      <dt>Ceklis</dt>
+                      <dd>{p.ceklis}/{p.ceklisMax}</dd>
+                      <i className="lap-bar"><i style={{ width: `${pct(p.ceklis, p.ceklisMax)}%` }} /></i>
+                    </div>
+                    <div>
+                      <dt>Lapsit</dt>
+                      <dd>{p.lapsit ? 'Terkirim' : 'Belum'}</dd>
+                      <i className="lap-bar"><i style={{ width: p.lapsit ? '100%' : '0%' }} /></i>
+                    </div>
+                    {tampilNilai && p.nilai !== undefined && (
+                      <div>
+                        <dt>Nilai</dt>
+                        <dd>{Math.round(p.nilai)}</dd>
+                        <i className="lap-bar"><i style={{ width: `${pct(p.nilai, 100)}%` }} /></i>
+                      </div>
+                    )}
+                  </dl>
+
+                  {lap && (
+                    <div className="lap-lapsit">
+                      <span className="lap-eyebrow">Laporan situasi</span>
+                      <p>{lap.catatan}</p>
+                    </div>
+                  )}
+                </article>
               );
             })}
           </motion.section>
         )}
       </AnimatePresence>
-    </>
+    </div>
   );
 }

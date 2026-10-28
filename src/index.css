@@ -594,57 +594,62 @@ button:active { transform:scale(.97); }
 .resetbox span { font-size:12px; line-height:1.5; }
 .resetbox .row { display:flex; gap:8px; }
 .resetbox .row .btn { flex:1; }
-/* Tab Laporan (mode admin): kalender bukti piket bulanan — mobile-first */
-.lapbar { display:flex; align-items:center; justify-content:space-between; margin:12px 0 8px; }
-.lapbar b { font-size:var(--fs-md); }
-.lapsiapa { width:100%; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:var(--radius); padding:10px; font-size:16px; margin-bottom:10px; }
-.lapcal { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; }
-.laphead { text-align:center; font-size:11px; color:var(--dim); padding:2px 0 4px; }
-.lapday { position:relative; aspect-ratio:1; min-height:40px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); color:var(--ink); font:inherit; font-size:13px; cursor:pointer; padding:0; }
-.lapday:disabled { background:none; border-color:transparent; color:var(--faint, var(--dim)); cursor:default; }
-.lapday i { width:8px; height:8px; border-radius:50%; }
-.lapday.today span { text-decoration:underline; text-underline-offset:3px; }
-.lapday.on { outline:2px solid var(--accent); outline-offset:1px; }
-.st-lengkap { --st:var(--accent); } .st-sebagian { --st:var(--warning); } .st-kosong { --st:var(--danger); } .st-nanti { --st:var(--dim); }
-.lapday.st-lengkap { border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.lapday.st-kosong { border-color:color-mix(in srgb, var(--danger) 45%, var(--line)); }
-.lapday.st-sebagian { border-color:color-mix(in srgb, var(--warning) 45%, var(--line)); }
-.lapday i, .laplegend i { background:var(--st); }
-.laplegend { display:flex; flex-wrap:wrap; gap:6px 14px; margin:10px 0 4px; font-size:12px; color:var(--dim); }
-.laplegend span { display:inline-flex; align-items:center; gap:5px; }
-.laplegend i { width:8px; height:8px; border-radius:50%; display:inline-block; }
-.lapdetail { margin-top:14px; display:flex; flex-direction:column; gap:10px; }
-.lapdetail h2 { margin:0; font-size:var(--fs-md); text-transform:capitalize; }
-.lapcard { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:12px; display:flex; flex-direction:column; gap:10px; }
-.lapcardhead { display:flex; align-items:center; gap:8px; min-width:0; }
-.lapcardhead b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.lapcardhead .ava, .lapcardhead .pdot { width:24px; height:24px; flex:none; border-radius:50%; display:inline-block; object-fit:cover; }
-.lapnilai { margin-left:auto; font-size:12px; color:var(--dim); white-space:nowrap; }
-.lapfoto { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; }
-.lapfoto .thumbbtn, .lapkosong { aspect-ratio:1; width:100%; }
-.lapfoto img { width:100%; height:100%; object-fit:cover; display:block; border-radius:var(--radius); }
-.lapkosong { display:grid; place-items:center; border:1px dashed var(--line); border-radius:var(--radius); color:var(--dim); }
-.lapstat { display:flex; flex-wrap:wrap; gap:6px 12px; margin:0; font-size:12px; color:var(--dim); }
-.lapstat span { display:inline-flex; align-items:center; gap:4px; }
-.lapstat .ok { color:var(--accent); }
-.laplapsit { margin:0; font-size:13px; line-height:1.5; color:var(--ink); }
-/* ---- Halaman pemantau alumni (/pantau): hanya lihat, huruf & sentuhan lebih besar ---- */
+/* ---- Laporan bukti piket (tab Laporan admin & halaman /pantau) ---- */
+.lap { --ok:#4ade80; --part:#fbbf24; --bad:#f87171; --sched:#64748b; padding-bottom:8px; }
+.st-lengkap { --st:var(--ok); } .st-sebagian { --st:var(--part); } .st-kosong { --st:var(--bad); } .st-nanti { --st:var(--sched); }
+.lap-eyebrow { display:block; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--faint, var(--dim)); }
+.lap-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:16px 0 12px; }
+.lap .lap-title { margin:2px 0 0; font-family:inherit; font-size:22px; font-weight:650; letter-spacing:0; text-transform:none; color:var(--ink); }
+.lap-nav { display:flex; gap:6px; }
+.lap-nav button { width:40px; height:40px; display:grid; place-items:center; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+.lap-filter { width:100%; height:44px; padding:0 12px; margin-bottom:12px; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:8px; font:inherit; font-size:15px; }
+.lap-sum { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; margin-bottom:14px; }
+.lap-sumitem { padding:10px 8px 9px; background:var(--card); border:1px solid var(--line); border-top:2px solid var(--st); border-radius:8px; min-width:0; }
+.lap-sumitem b { display:block; font-size:20px; font-weight:650; line-height:1.1; color:var(--ink); font-variant-numeric:tabular-nums; }
+.lap-sumitem span { display:block; margin-top:2px; font-size:11.5px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lap-cal { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; padding:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+.lap-wd { text-align:center; font-size:11px; font-weight:600; color:var(--faint, var(--dim)); padding:2px 0 6px; }
+.lap-day { position:relative; aspect-ratio:1; min-height:40px; padding:0; display:grid; place-items:center; background:transparent; border:1px solid transparent; border-radius:8px; color:var(--ink); font:inherit; font-size:14px; font-variant-numeric:tabular-nums; cursor:pointer; transition:background .15s, border-color .15s; }
+.lap-day:disabled { color:var(--faint, var(--dim)); opacity:.55; cursor:default; }
+.lap-day[class*="st-"] { background:color-mix(in srgb, var(--st) 13%, transparent); }
+.lap-day[class*="st-"]::after { content:""; position:absolute; left:28%; right:28%; bottom:5px; height:3px; border-radius:2px; background:var(--st); }
+.lap-day.today span { display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--ink); color:var(--bg); font-weight:650; }
+.lap-day.on { border-color:var(--ink); }
+.lap-detail { margin-top:18px; display:flex; flex-direction:column; gap:10px; }
+.lap-dhead h3 { margin:2px 0 0; font-size:17px; font-weight:650; color:var(--ink); text-transform:capitalize; }
+.lap-card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:14px; }
+.lap-chead { display:flex; align-items:center; gap:10px; min-width:0; }
+.lap-ava { width:38px; height:38px; flex:none; border-radius:50%; object-fit:cover; }
+.lap-ini { display:grid; place-items:center; color:#fff; font-weight:650; font-size:15px; }
+.lap-who { min-width:0; flex:1; display:flex; flex-direction:column; }
+.lap-who b { font-size:15px; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lap-who span { font-size:12.5px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lap-badge { flex:none; font-size:11.5px; font-weight:600; padding:4px 8px; border-radius:999px; color:var(--st); background:color-mix(in srgb, var(--st) 14%, transparent); border:1px solid color-mix(in srgb, var(--st) 35%, transparent); }
+.lap-photos { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.lap-ph { position:relative; aspect-ratio:4/3; width:100%; padding:0; overflow:hidden; border-radius:8px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }
+.lap-ph img { width:100%; height:100%; object-fit:cover; display:block; }
+.lap-cap { position:absolute; left:0; right:0; bottom:0; padding:14px 8px 6px; font-size:11.5px; line-height:1.3; color:#fff; text-align:left; background:linear-gradient(transparent, rgba(0,0,0,.75)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lap-none { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; border-style:dashed; color:var(--faint, var(--dim)); font-size:11.5px; cursor:default; }
+.lap-skel { cursor:default; animation:lapskel 1.2s ease-in-out infinite; }
+@keyframes lapskel { 50% { opacity:.5; } }
+.lap-metrics { display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:12px 16px; margin:0; }
+.lap-metrics div { display:grid; grid-template-columns:1fr auto; align-items:baseline; row-gap:6px; }
+.lap-metrics dt { font-size:12px; color:var(--dim); }
+.lap-metrics dd { margin:0; font-size:13px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+.lap-bar { grid-column:1 / -1; display:block; height:4px; border-radius:2px; background:color-mix(in srgb, var(--ink) 10%, transparent); overflow:hidden; }
+.lap-bar i { display:block; height:100%; background:var(--accent); border-radius:2px; }
+.lap-lapsit { padding:12px; background:var(--bg); border:1px solid var(--line); border-radius:8px; }
+.lap-lapsit p { margin:6px 0 0; font-size:14px; line-height:1.55; color:var(--ink); white-space:pre-wrap; overflow-wrap:anywhere; }
+/* ---- Halaman pemantau (/pantau): hanya lihat, huruf sedikit lebih besar ---- */
 .phone.pantau { padding-bottom:calc(28px + env(safe-area-inset-bottom)); }
-.pantaubar { display:flex; align-items:center; justify-content:center; gap:6px; margin:0; padding:8px 16px; font-size:14px; color:#7dd3fc; border-bottom:1px solid var(--line); }
-.pantau .lapbar b { font-size:20px; }
-.pantau .lapbar .iconbtn { padding:10px; }
-.pantau .lapsiapa { font-size:17px; padding:12px; }
-.pantau .laphead { font-size:13px; }
-.pantau .lapday { font-size:16px; min-height:44px; }
-.pantau .lapday i { width:9px; height:9px; }
-.pantau .laplegend { font-size:14px; }
-.pantau .lapdetail h2 { font-size:19px; }
-.pantau .lapcardhead b { font-size:17px; }
-.pantau .lapcardhead .ava, .pantau .lapcardhead .pdot { width:32px; height:32px; }
-.pantau .lapstat { font-size:14px; }
-.pantau .laplapsit { font-size:16px; }
-.pantau .pvcard b { font-size:17px; }
-.pantau .pvcard .hint { font-size:14px; }
+.pantau .hd { display:block; text-align:left; }
+.pantau .hd h1 { text-align:left; font-size:18px; }
+.pantau .hd p { text-align:left; margin-top:3px; }
+.pantau .lap-day { font-size:15.5px; }
+.pantau .lap-who b { font-size:16px; }
+.pantau .lap-metrics dt, .pantau .lap-metrics dd { font-size:14px; }
+.pantau .lap-lapsit p { font-size:15.5px; }
+.pantau .pvcard b { font-size:16px; }
 .pantaulink { margin:0; padding:10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font-size:13px; word-break:break-all; user-select:all; }
 .pantaurow { display:flex; gap:8px; }
 .pantaurow .btn { flex:1; }

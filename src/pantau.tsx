@@ -1,7 +1,6 @@
 import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence } from 'framer-motion';
-import { Eye } from 'lucide-react';
 import './index.css';
 import { loadPantauHari, loadPantauLaporan, type LaporanPantau } from './api';
 import { Empty } from './components/Empty';
@@ -19,16 +18,11 @@ function Pantau() {
   const [preview, setPreview] = useState<PreviewState | null>(null);
 
   return (
-    <div className="phone pantau">
+    <div className="phone tac pantau">
       <header className="hd">
-        <span />
-        <div>
-          <h1>Laporan Piket</h1>
-          <p>Menwa USB YPKP</p>
-        </div>
-        <span />
+        <h1>Laporan Piket Menwa USB YPKP</h1>
+        <p>Akses pemantau · hanya lihat</p>
       </header>
-      <p className="pantaubar"><Eye size={15} /> Mode pantau — hanya lihat</p>
       <main>
         {mati
           ? <Empty text="Link pemantau tidak berlaku. Minta link terbaru ke pengurus." />
@@ -44,7 +38,7 @@ function Pantau() {
               muatHari={(t) => loadPantauHari(token, t)}
               onPreview={setPreview}
               tampilNilai={false}
-              pesanGagal="Gagal memuat laporan — periksa koneksi internet lalu muat ulang halaman."
+              pesanGagal="Laporan gagal dimuat. Periksa koneksi internet, lalu muat ulang halaman."
             />
           )}
       </main>

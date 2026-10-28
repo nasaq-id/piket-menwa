@@ -1657,7 +1657,7 @@ app.get('/api/pantau/:token/laporan', rateLimit(60, 60_000), requirePantau, (req
   res.json({
     ...lap,
     days: lap.days.map((d) => ({ ...d, petugas: d.petugas.map(({ nilai: _n, ...p }) => p) })),
-    members: db.select({ id: members.id, nama: members.nama, warna: members.warna, foto: members.foto })
+    members: db.select({ id: members.id, nama: members.nama, warna: members.warna, foto: members.foto, jabatan: members.jabatan })
       .from(members).all().sort((a, b) => a.nama.localeCompare(b.nama)),
   });
 });
