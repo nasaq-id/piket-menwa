@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, ImageOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ImageOff, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadEvidence, loadLaporan, loadLapsit, type EvidenceRow, type Laporan, type LapsitRow, type Member } from '../api';
 import { Empty } from '../components/Empty';
@@ -42,6 +42,35 @@ const statusHari = (tanggal: string, today: string, ps: Petugas[]): Status => {
   if (ps.every(kosong)) return 'kosong';
   return 'sebagian';
 };
+
+// Ubin foto bukti: skeleton bertahan sampai gambar benar-benar termuat, lalu
+// pudar masuk. Gagal → ketuk untuk muat ulang (param r memaksa unduh ulang).
+function FotoBukti({ file, tugas, onBuka }: { file: string; tugas: string; onBuka: () => void }) {
+  const [st, setSt] = useState<'muat' | 'ok' | 'gagal'>('muat');
+  const [coba, setCoba] = useState(0);
+  const img = useRef<HTMLImageElement>(null);
+  // Gambar dari cache bisa sudah complete sebelum onLoad terpasang.
+  useEffect(() => {
+    const el = img.current;
+    if (el?.complete) setSt(el.naturalWidth > 0 ? 'ok' : 'gagal');
+  }, [file, coba]);
+  const src = coba ? `${file}&r=${coba}` : file;
+  return (
+    <button
+      type="button" className={`lap-ph ${st}`}
+      onClick={st === 'gagal' ? () => { setSt('muat'); setCoba((n) => n + 1); } : onBuka}
+      aria-label={st === 'gagal' ? `Muat ulang foto ${tugas}` : `Lihat foto ${tugas}`}
+      aria-busy={st === 'muat'}
+    >
+      {st !== 'gagal' && (
+        <img ref={img} key={src} src={src} alt={tugas} loading="lazy" decoding="async"
+          onLoad={() => setSt('ok')} onError={() => setSt('gagal')} />
+      )}
+      {st === 'gagal' && <span className="lap-gagal"><RefreshCw size={16} /><span>Gagal dimuat · ketuk ulang</span></span>}
+      <span className="lap-cap">{tugas}</span>
+    </button>
+  );
+}
 
 export function LaporanTab({ store }: { store: AppStore }) {
   return (
@@ -223,14 +252,10 @@ export function LaporanView({ members, muatBulan, muatHari, onPreview, tampilNil
                         const f = fotoSaya[i];
                         return f
                           ? (
-                            <button
-                              key={f.id} type="button" className="lap-ph"
-                              onClick={() => onPreview({ file: f.file, judul: f.tugas, by: nama(p.memberId), tanggal: pilih })}
-                              aria-label={`Lihat foto ${f.tugas}`}
-                            >
-                              <img src={f.file} alt={f.tugas} loading="lazy" />
-                              <span className="lap-cap">{f.tugas}</span>
-                            </button>
+                            <FotoBukti
+                              key={f.id} file={f.file} tugas={f.tugas}
+                              onBuka={() => onPreview({ file: f.file, judul: f.tugas, by: nama(p.memberId), tanggal: pilih })}
+                            />
                           )
                           : <span key={`x${i}`} className="lap-ph lap-none"><ImageOff size={16} /><span>Belum diunggah</span></span>;
                       })}

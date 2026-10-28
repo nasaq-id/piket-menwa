@@ -80,10 +80,16 @@ function signPath(relPath: string, expMs: number): string {
   const h = createHmac('sha256', SIGN_KEY).update(`${relPath}:${expMs}`).digest('hex');
   return h;
 }
+// exp dibulatkan ke batas jam (berlaku 1–2 jam) supaya URL sama selama jendela
+// itu → browser bisa cache foto. v = mtime berkas: foto yang diunggah ulang
+// dengan nama sama otomatis dapat URL baru (cache lama tidak terpakai).
+const SIGN_WINDOW_MS = 60 * 60_000;
 function makeSignedEvidenceUrl(relPath: string): string {
-  const exp = Date.now() + 60_000; // 60 detik
+  const exp = (Math.floor(Date.now() / SIGN_WINDOW_MS) + 2) * SIGN_WINDOW_MS;
   const sig = signPath(relPath, exp);
-  return `/uploads-signed/${relPath}?exp=${exp}&sig=${sig}`;
+  let v = 0;
+  try { v = Math.floor(fs.statSync(path.resolve(UPLOAD_DIR, relPath)).mtimeMs); } catch { /* berkas hilang → 404 saat diminta */ }
+  return `/uploads-signed/${relPath}?exp=${exp}&sig=${sig}&v=${v}`;
 }
 app.get('/uploads-signed/evidence/:file', (req, res) => {
   const relPath = `evidence/${req.params.file}`;
@@ -94,7 +100,9 @@ app.get('/uploads-signed/evidence/:file', (req, res) => {
   const a = Buffer.from(sig, 'hex');
   const b = Buffer.from(expected, 'hex');
   if (a.length !== b.length || !timingSafeEqual(a, b)) return void res.status(403).send('signature invalid');
-  res.sendFile(path.resolve(UPLOAD_DIR, relPath));
+  // private: jangan disimpan proxy/CDN; umur cache = sisa masa berlaku link.
+  res.set('Cache-Control', `private, max-age=${Math.floor((exp - Date.now()) / 1000)}`);
+  res.sendFile(path.resolve(UPLOAD_DIR, relPath), { cacheControl: false });
 });
 
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] as const;
