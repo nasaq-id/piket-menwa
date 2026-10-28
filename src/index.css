@@ -628,3 +628,23 @@ button:active { transform:scale(.97); }
 .lapstat span { display:inline-flex; align-items:center; gap:4px; }
 .lapstat .ok { color:var(--accent); }
 .laplapsit { margin:0; font-size:13px; line-height:1.5; color:var(--ink); }
+/* ---- Halaman pemantau alumni (/pantau): hanya lihat, huruf & sentuhan lebih besar ---- */
+.phone.pantau { padding-bottom:calc(28px + env(safe-area-inset-bottom)); }
+.pantaubar { display:flex; align-items:center; justify-content:center; gap:6px; margin:0; padding:8px 16px; font-size:14px; color:#7dd3fc; border-bottom:1px solid var(--line); }
+.pantau .lapbar b { font-size:20px; }
+.pantau .lapbar .iconbtn { padding:10px; }
+.pantau .lapsiapa { font-size:17px; padding:12px; }
+.pantau .laphead { font-size:13px; }
+.pantau .lapday { font-size:16px; min-height:44px; }
+.pantau .lapday i { width:9px; height:9px; }
+.pantau .laplegend { font-size:14px; }
+.pantau .lapdetail h2 { font-size:19px; }
+.pantau .lapcardhead b { font-size:17px; }
+.pantau .lapcardhead .ava, .pantau .lapcardhead .pdot { width:32px; height:32px; }
+.pantau .lapstat { font-size:14px; }
+.pantau .laplapsit { font-size:16px; }
+.pantau .pvcard b { font-size:17px; }
+.pantau .pvcard .hint { font-size:14px; }
+.pantaulink { margin:0; padding:10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font-size:13px; word-break:break-all; user-select:all; }
+.pantaurow { display:flex; gap:8px; }
+.pantaurow .btn { flex:1; }

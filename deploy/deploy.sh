@@ -19,7 +19,7 @@ RSH="ssh -p $SERVER_PORT -o BatchMode=yes"
 remote() { $RSH "$SERVER_SSH" "$@" </dev/null; }
 
 echo "==> build frontend"
-pnpm build
+VITE_APP_URL="$APP_URL" pnpm build   # VITE_APP_URL: URL absolut og:image halaman /pantau/
 
 echo "==> kirim kode + frontend"
 rsync -a --delete -e "$RSH" \

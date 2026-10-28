@@ -1,14 +1,21 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Camera, ChevronLeft, ChevronRight, ClipboardList, FileText } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { loadEvidence, loadLaporan, loadLapsit, type EvidenceRow, type Laporan, type LapsitRow } from '../api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { loadEvidence, loadLaporan, loadLapsit, type EvidenceRow, type Laporan, type LapsitRow, type Member } from '../api';
 import { Empty } from '../components/Empty';
-import type { AppStore } from '../hooks/useAppStore';
+import type { AppStore, PreviewState } from '../hooks/useAppStore';
 
-// Laporan bukti piket (MODE ADMIN): kalender bulanan berwarna per hari, ketuk
-// tanggal → foto bukti, ceklis & lapsit tiap petugas. Mobile-first.
+// Laporan bukti piket: kalender bulanan berwarna per hari, ketuk tanggal → foto
+// bukti, ceklis & lapsit tiap petugas. Mobile-first. Dipakai MODE ADMIN (tab
+// Laporan, dengan nilai) dan halaman pemantau alumni (/pantau, tanpa nilai).
 type Status = 'lengkap' | 'sebagian' | 'kosong' | 'nanti';
-type Petugas = Laporan['days'][number]['petugas'][number];
+type Petugas = Omit<Laporan['days'][number]['petugas'][number], 'nilai'> & { nilai?: number };
+export type LaporanData = { bulan: string; today: string; days: { tanggal: string; petugas: Petugas[] }[] };
+export type HariData = {
+  evidence: Pick<EvidenceRow, 'id' | 'tugas' | 'memberId' | 'file'>[];
+  lapsit: Pick<LapsitRow, 'memberId' | 'catatan'>[];
+};
+type Anggota = Pick<Member, 'id' | 'nama' | 'warna' | 'foto'>;
 
 const HARI = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -34,24 +41,50 @@ const statusHari = (tanggal: string, today: string, ps: Petugas[]): Status => {
 };
 
 export function LaporanTab({ store }: { store: AppStore }) {
-  const { members, nama, warna, setPreview } = store;
+  return (
+    <LaporanView
+      members={store.members}
+      muatBulan={loadLaporan}
+      muatHari={async (t) => {
+        const [evidence, lapsit] = await Promise.all([loadEvidence(t, t), loadLapsit(t, t)]);
+        return { evidence: evidence ?? [], lapsit: lapsit ?? [] };
+      }}
+      onPreview={store.setPreview}
+      tampilNilai
+      pesanGagal="Gagal memuat laporan — pastikan online & mode admin aktif."
+    />
+  );
+}
+
+export function LaporanView({ members, muatBulan, muatHari, onPreview, tampilNilai, pesanGagal }: {
+  members: Anggota[];
+  muatBulan: (bulan: string) => Promise<LaporanData | null>;
+  muatHari: (tanggal: string) => Promise<HariData | null>;
+  onPreview: (p: PreviewState) => void;
+  tampilNilai: boolean;
+  pesanGagal: string;
+}) {
+  const nama = (id: string) => members.find((m) => m.id === id)?.nama ?? id;
+  // Sumber data lewat ref: fungsi inline pemanggil tidak memicu muat ulang tiap render.
+  const sumber = useRef({ muatBulan, muatHari });
+  useEffect(() => { sumber.current = { muatBulan, muatHari }; });
   const [bulan, setBulan] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
   });
-  const [data, setData] = useState<Laporan | null>(null);
+  const [data, setData] = useState<LaporanData | null>(null);
   const [gagal, setGagal] = useState(false);
   const [siapa, setSiapa] = useState(''); // '' = semua anggota
   const [pilih, setPilih] = useState<string | null>(null);
-  const [ev, setEv] = useState<EvidenceRow[] | null>(null);
-  const [laps, setLaps] = useState<LapsitRow[]>([]);
+  const [ev, setEv] = useState<HariData['evidence'] | null>(null);
+  const [laps, setLaps] = useState<HariData['lapsit']>([]);
 
   useEffect(() => {
     let batal = false;
     (async () => {
       setData(null);
       setGagal(false);
-      const r = await loadLaporan(bulan);
+      const r = await sumber.current.muatBulan(bulan);
       if (batal) return;
       if (!r) return setGagal(true);
       setData(r);
@@ -68,10 +101,10 @@ export function LaporanTab({ store }: { store: AppStore }) {
     let batal = false;
     (async () => {
       setEv(null);
-      const [e, l] = await Promise.all([loadEvidence(pilih, pilih), loadLapsit(pilih, pilih)]);
+      const h = await sumber.current.muatHari(pilih);
       if (batal) return;
-      setEv(e ?? []);
-      setLaps(l ?? []);
+      setEv(h?.evidence ?? []);
+      setLaps(h?.lapsit ?? []);
     })();
     return () => { batal = true; };
   }, [pilih]);
@@ -114,7 +147,7 @@ export function LaporanTab({ store }: { store: AppStore }) {
         {members.map((m) => <option key={m.id} value={m.id}>{m.nama}</option>)}
       </select>
 
-      {gagal && <Empty text="Gagal memuat laporan — pastikan online & mode admin aktif." />}
+      {gagal && <Empty text={pesanGagal} />}
 
       <div className="lapcal" role="grid" aria-label={`Kalender laporan ${BULAN[mo - 1]} ${y}`}>
         {HARI.map((h) => <span key={h} className="laphead">{h}</span>)}
@@ -160,10 +193,10 @@ export function LaporanTab({ store }: { store: AppStore }) {
               return (
                 <div key={p.memberId} className="lapcard">
                   <div className="lapcardhead">
-                    {m?.foto ? <img className="ava" src={m.foto} alt="" /> : <i className="pdot" style={{ background: warna(p.memberId) }} />}
+                    {m?.foto ? <img className="ava" src={m.foto} alt="" /> : <i className="pdot" style={{ background: m?.warna ?? '#888' }} />}
                     <b>{nama(p.memberId)}</b>
                     {!p.terjadwal && <em className="pill sm">di luar jadwal</em>}
-                    <span className="lapnilai">nilai {Math.round(p.nilai)}</span>
+                    {tampilNilai && p.nilai !== undefined && <span className="lapnilai">nilai {Math.round(p.nilai)}</span>}
                   </div>
                   <div className="lapfoto">
                     {ev === null
@@ -174,7 +207,7 @@ export function LaporanTab({ store }: { store: AppStore }) {
                           ? (
                             <button
                               key={f.id} type="button" className="thumbbtn"
-                              onClick={() => setPreview({ file: f.file, judul: f.tugas, by: nama(p.memberId), tanggal: pilih })}
+                              onClick={() => onPreview({ file: f.file, judul: f.tugas, by: nama(p.memberId), tanggal: pilih })}
                               aria-label={`Lihat foto ${f.tugas}`}
                             >
                               <img src={f.file} alt={f.tugas} />

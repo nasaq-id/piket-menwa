@@ -1591,9 +1591,7 @@ app.get('/api/nilai/leaderboard', requireSuper, (req, res) => {
 // Ringkasan per hari per petugas TANPA foto (untuk kalender); foto & lapsit
 // dimuat terpisah saat satu tanggal diketuk. Petugas = jadwal efektif hari
 // itu + siapa pun yang kirim bukti/lapsit (mis. jadwal berubah belakangan).
-app.get('/api/laporan', requireAdmin, (req, res) => {
-  const bulan = String(req.query.bulan ?? '');
-  if (!/^\d{4}-\d{2}$/.test(bulan)) return void res.status(400).json({ error: 'bulan invalid (YYYY-MM)' });
+const laporanBulan = (bulan: string) => {
   const [y, m] = bulan.split('-').map(Number);
   const jmlHari = new Date(y, m, 0).getDate();
   const awal = `${bulan}-01`;
@@ -1624,7 +1622,64 @@ app.get('/api/laporan', requireAdmin, (req, res) => {
       }),
     });
   }
-  res.json({ bulan, today: todayLocal(), days });
+  return { bulan, today: todayLocal(), days };
+};
+const BULAN_RE = /^\d{4}-\d{2}$/;
+app.get('/api/laporan', requireAdmin, (req, res) => {
+  const bulan = String(req.query.bulan ?? '');
+  if (!BULAN_RE.test(bulan)) return void res.status(400).json({ error: 'bulan invalid (YYYY-MM)' });
+  res.json(laporanBulan(bulan));
+});
+
+// ---- Link pemantau (senior/alumni): laporan HANYA LIHAT tanpa login ----
+// Satu token rahasia di setting `pantau_token`; dibuat/diganti/dimatikan dari
+// superadmin. Tanpa nilai, tanpa lokasi lapsit, tanpa data kontak anggota.
+const pantauOk = (given: unknown): boolean => {
+  const good = getSetting('pantau_token');
+  if (!good || typeof given !== 'string') return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(good);
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+const requirePantau = (
+  req: import('express').Request,
+  res: import('express').Response,
+  next: import('express').NextFunction,
+) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  if (!pantauOk(req.params.token)) return void res.status(404).json({ error: 'Link pemantau tidak berlaku. Minta link terbaru ke pengurus.' });
+  next();
+};
+app.get('/api/pantau/:token/laporan', rateLimit(60, 60_000), requirePantau, (req, res) => {
+  const bulan = String(req.query.bulan ?? '');
+  if (!BULAN_RE.test(bulan)) return void res.status(400).json({ error: 'bulan invalid (YYYY-MM)' });
+  const lap = laporanBulan(bulan);
+  res.json({
+    ...lap,
+    days: lap.days.map((d) => ({ ...d, petugas: d.petugas.map(({ nilai: _n, ...p }) => p) })),
+    members: db.select({ id: members.id, nama: members.nama, warna: members.warna, foto: members.foto })
+      .from(members).all().sort((a, b) => a.nama.localeCompare(b.nama)),
+  });
+});
+app.get('/api/pantau/:token/hari', rateLimit(60, 60_000), requirePantau, (req, res) => {
+  const tanggal = String(req.query.tanggal ?? '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return void res.status(400).json({ error: 'tanggal invalid' });
+  res.json({
+    evidence: db.select().from(evidence).where(eq(evidence.tanggal, tanggal)).all()
+      .map((r) => ({ id: r.id, tugas: r.tugas, memberId: r.memberId, file: makeSignedEvidenceUrl(`evidence/${r.file}`) })),
+    lapsit: db.select().from(lapsit).where(eq(lapsit.tanggal, tanggal)).all()
+      .map((r) => ({ memberId: r.memberId, catatan: r.catatan })),
+  });
+});
+app.get('/api/super/pantau', requireSuper, (_req, res) => res.json({ token: getSetting('pantau_token') ?? null }));
+app.put('/api/super/pantau/rotate', requireSuper, (_req, res) => {
+  const token = randomBytes(18).toString('base64url');
+  setSetting('pantau_token', token);
+  res.json({ ok: true, token });
+});
+app.delete('/api/super/pantau', requireSuper, (_req, res) => {
+  db.delete(settings).where(eq(settings.key, 'pantau_token')).run();
+  res.json({ ok: true });
 });
 
 // Nilai hari ini utk 1 member (dipakai kartu "Nilai Piketmu" di HP).
@@ -1663,10 +1718,11 @@ app.get('/api/nilai/detail', requireSuper, (req, res) => {
 });
 
 // ---- settings ketua/wakil (superadmin) ----
+const SETTING_RAHASIA = new Set(['absen_qr', 'pantau_token']);
 app.get('/api/settings', (_req, res) => {
   const out: Record<string, string> = {};
-  // absen_qr = rahasia QR mako: jangan pernah ikut keluar di endpoint publik ini.
-  for (const s of db.select().from(settings).all()) if (s.key !== 'absen_qr') out[s.key] = s.value;
+  // Token rahasia (QR mako, link pemantau): jangan pernah ikut keluar di endpoint publik ini.
+  for (const s of db.select().from(settings).all()) if (!SETTING_RAHASIA.has(s.key)) out[s.key] = s.value;
   res.json(out);
 });
 

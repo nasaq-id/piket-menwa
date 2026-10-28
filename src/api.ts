@@ -725,3 +725,44 @@ export async function loadNilaiToday(date: string, memberId: string): Promise<nu
   const r = await getAuthed<{ nilai: number }>(`/api/nilai/today?date=${date}&memberId=${encodeURIComponent(memberId)}${q}`);
   return r?.nilai ?? null;
 }
+
+// ---- Link pemantau (senior/alumni): laporan hanya-lihat tanpa login ----
+export type LaporanPantau = Omit<Laporan, 'days'> & {
+  days: { tanggal: string; petugas: Omit<Laporan['days'][number]['petugas'][number], 'nilai'>[] }[];
+  members: Pick<Member, 'id' | 'nama' | 'warna' | 'foto'>[];
+};
+export async function loadPantauLaporan(token: string, bulan: string): Promise<LaporanPantau | 'mati' | null> {
+  try {
+    const r = await fetch(`/api/pantau/${encodeURIComponent(token)}/laporan?bulan=${bulan}`);
+    if (r.status === 404) return 'mati';
+    if (!r.ok) return null;
+    return (await r.json()) as LaporanPantau;
+  } catch {
+    return null;
+  }
+}
+export async function loadPantauHari(token: string, tanggal: string) {
+  return get<{ evidence: Pick<EvidenceRow, 'id' | 'tugas' | 'memberId' | 'file'>[]; lapsit: Pick<LapsitRow, 'memberId' | 'catatan'>[] }>(
+    `/api/pantau/${encodeURIComponent(token)}/hari?tanggal=${tanggal}`,
+  );
+}
+// undefined = gagal memuat (offline / PIN), null = link belum dibuat / dimatikan.
+export const loadPantauToken = async () => {
+  const r = await superGet<{ token: string | null }>('/api/super/pantau');
+  return r ? r.token : undefined;
+};
+export async function rotatePantauToken(): Promise<string | null> {
+  const r = await superPut('/api/super/pantau/rotate', {});
+  return r.ok ? (await loadPantauToken()) ?? null : null;
+}
+export async function matikanPantau(): Promise<boolean> {
+  try {
+    const r = await fetch('/api/super/pantau', {
+      method: 'DELETE',
+      headers: { ...(getSuperPin() ? { 'x-super-pin': getSuperPin() as string } : {}) },
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}

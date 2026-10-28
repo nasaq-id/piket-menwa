@@ -34,6 +34,10 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    // Halaman kedua: /pantau/ (laporan hanya-lihat untuk senior/alumni).
+    rollupOptions: { input: { main: 'index.html', pantau: 'pantau/index.html' } },
+  },
   server: {
     allowedHosts: true,
     proxy: { '/api': 'http://localhost:3001', '/uploads': 'http://localhost:3001' },

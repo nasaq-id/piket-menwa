@@ -9,6 +9,7 @@ import {
 import { dateStr, pinSalahMsg } from './piket';
 import { BREAKDOWN } from './breakdown';
 import { MakoPanel } from './components/MakoPanel';
+import { PantauPanel } from './components/PantauPanel';
 import { QrPanel } from './components/QrPanel';
 import { Button } from './components/Button';
 import { ConfirmSheet } from './components/ConfirmSheet';
@@ -542,6 +543,8 @@ export default function SuperView({ onExit, onBlocked }: { onExit: () => void; o
 
           {tab === 'pengaturan' && (
             <>
+              <h2>Link pemantau</h2>
+              <PantauPanel ask={ask} />
               <h2>Pengaturan absen</h2>
               {state?.absenEnabled
                 ? <><MakoPanel /><QrPanel ask={ask} faceEnabled={state?.faceEnabled ?? false} /></>
